@@ -2,7 +2,8 @@ import asyncio
 from collections.abc import Sequence
 
 import pytest
-from src.waterfall import Waterfall
+
+from dynamo_utils.waterfall import Waterfall
 
 
 @pytest.mark.asyncio

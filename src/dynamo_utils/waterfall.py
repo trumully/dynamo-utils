@@ -26,7 +26,7 @@ import time
 from collections.abc import MutableSequence, Sequence
 from typing import Any, Literal, overload
 
-from src.typedefs import Coro, CoroFn
+from .typedefs import Coro, CoroFn
 
 __all__ = ("Waterfall",)
 

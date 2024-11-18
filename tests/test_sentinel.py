@@ -1,6 +1,6 @@
 import pickle
 
-from src.sentinel import Sentinel, sentinel
+from dynamo_utils.sentinel import Sentinel, sentinel
 
 
 def test_sentinel_identity():

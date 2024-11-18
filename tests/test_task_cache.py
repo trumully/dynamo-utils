@@ -1,7 +1,8 @@
 import asyncio
 
 import pytest
-from src.task_cache import lru_task_cache, task_cache
+
+from dynamo_utils.task_cache import lru_task_cache, task_cache
 
 
 @pytest.mark.asyncio

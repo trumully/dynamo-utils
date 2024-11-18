@@ -5,12 +5,12 @@ from collections.abc import Hashable, MutableSequence
 from functools import partial, update_wrapper
 from typing import TYPE_CHECKING, Any, Protocol, overload
 
-from src.sentinel import Sentinel, sentinel
+from .sentinel import Sentinel, sentinel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from src.typedefs import CoroFn
+    from .typedefs import CoroFn
 
 
 __all__ = ("task_cache", "lru_task_cache")
