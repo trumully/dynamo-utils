@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Hashable, MutableSequence
+from collections.abc import Hashable
 from functools import partial, update_wrapper
 from typing import TYPE_CHECKING, Any, Protocol, overload
 
@@ -19,14 +19,14 @@ __all__ = ("task_cache", "lru_task_cache")
 KWARGS_SENTINEL = sentinel("KWARGS_SENTINEL")
 
 
-class HashedSequence(MutableSequence[Hashable]):
+class HashedSequence(list[Hashable]):
     __slots__ = ("hashvalue",)
 
     def __init__(self, tup: tuple[Hashable, ...], hash: Callable[[object], int] = hash) -> None:  # noqa: A002
         self[:] = tup
         self.hashvalue = hash(tup)
 
-    def __hash__(self) -> int:
+    def __hash__(self) -> int:  # type: ignore[override]
         return self.hashvalue
 
     def __eq__(self, other: object) -> bool:
