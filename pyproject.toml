@@ -1,5 +1,7 @@
 [build-system]
-requires = ["hatchling"]
+requires = [
+    "hatchling",
+]
 build-backend = "hatchling.build"
 
 [project]
@@ -9,10 +11,13 @@ description = "Utility for my discord bot"
 readme = "README.md"
 license = { file = "LICENSE" }
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/dynamo_utils"]
+packages = [
+    "src/dynamo_utils",
+]
 
 [dependency-groups]
 dev = [
@@ -21,3 +26,156 @@ dev = [
     "pytest-asyncio>=0.24.0",
     "ruff>=0.7.4",
 ]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "session"
+xfail_strict = true
+testpaths = [
+    "tests",
+]
+
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--numprocesses",
+    "auto",
+    "--dist",
+    "loadfile",
+    "--maxfail",
+    "1",
+    "--verbosity",
+    "2",
+    "--durations",
+    "10",
+    "--durations-min",
+    "1.0",
+    "--hypothesis-show-statistics",
+]
+
+log_cli = true
+log_cli_level = "INFO"
+log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
+log_cli_date_format = "%Y-%m-%d %H:%M:%S"
+
+
+[tool.ruff]
+src = [
+    "dynamo",
+]
+target-version = "py313"
+line-length = 120
+
+[tool.ruff.lint]
+select = [
+    "A",
+    "B",
+    "C",
+    "E",
+    "D",
+    "F",
+    "G",
+    "I",
+    "N",
+    "Q",
+    "S",
+    "T",
+    "W",
+    #   "ANN", # annotations handled by pyright
+    "ARG",
+    "BLE",
+    #   "COM", # commas handled by black
+    "DJ",
+    "DTZ",
+    "EM",
+    "ERA",
+    "EXE",
+    "FBT",
+    "ICN",
+    "INP",
+    "ISC",
+    "NPY",
+    #   "PD", # too many false positives
+    "PGH",
+    "PIE",
+    "PL",
+    "PT",
+    "PTH",
+    "PYI",
+    "RET",
+    "RSE",
+    "RUF",
+    "SIM",
+    "SLF",
+    "TCH",
+    "TID",
+    "TRY",
+    "UP",
+    "YTT",
+]
+
+ignore = [
+    # Well named items don't need docstrings
+    "D1",
+
+    # Black handles this
+    "E501",
+
+    # A bit too opinionated
+    "RET504",
+    "RET505",
+    "RET506",
+    "RET507",
+    "RET508",
+
+    # Allow assert
+    "S101",
+
+    # Allow commented out code
+    "ERA001",
+]
+
+unfixable = [
+    "F841", # I'm planning to use it
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = [
+    "PLR2004", # Allow magic numbers
+]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+ignore-decorators = [
+    "typing.overload",
+]
+
+[tool.mypy]
+plugins = [
+    "numpy.typing.mypy_plugin",
+]
+python_version = "3.13"
+strict = true
+
+# Disallow dynamic typing
+disallow_untyped_defs = true
+disallow_any_unimported = true
+disallow_untyped_decorators = true
+disallow_incomplete_defs = true
+
+# Enable all strict checking flags
+check_untyped_defs = true
+warn_return_any = true
+warn_unused_ignores = true
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unreachable = true
+
+# Import handling
+ignore_missing_imports = true
+
+# Additional recommended settings
+allow_redefinition = false
+implicit_reexport = false
+strict_equality = true
