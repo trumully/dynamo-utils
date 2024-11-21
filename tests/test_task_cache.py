@@ -1,8 +1,21 @@
 import asyncio
 
 import pytest
+from dynamo_utils.task_cache import LRU, lru_task_cache, task_cache
 
-from dynamo_utils.task_cache import lru_task_cache, task_cache
+
+def test_lru_get():
+    cache: LRU[str, int] = LRU(2)
+    cache["a"] = 1
+    cache["b"] = 2
+
+    assert cache.get("a") == 1
+    assert cache.get("b") == 2
+
+    # Raises KeyError if `default` is not set
+    with pytest.raises(KeyError):
+        cache.get("c")
+    assert cache.get("c", None) is None
 
 
 @pytest.mark.asyncio
