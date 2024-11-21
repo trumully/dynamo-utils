@@ -48,97 +48,56 @@ class Waterfall[T]:
         self.max_wait_finalize: int = max_wait_finalize
         self.callback: CoroFn[[Sequence[T]], Any] = async_callback
         self.task: asyncio.Task[None] | None = None
-        self._alive: bool = False
 
     def start(self) -> None:
         if self.task is not None:
             msg = "Waterfall is already running."
             raise RuntimeError(msg) from None
-        self._alive = True
         self.task = asyncio.create_task(self._loop(), name="waterfall.loop")
 
     @overload
-    def stop(self, wait: Literal[True]) -> Coro[None]: ...
+    def stop(self, *, wait: Literal[True]) -> Coro[None]: ...
     @overload
-    def stop(self, wait: Literal[False]) -> None: ...
-    @overload
-    def stop(self, wait: bool = False) -> Coro[None] | None: ...  # noqa: FBT001, FBT002
-    def stop(self, wait: bool = False) -> Coro[None] | None:  # noqa: FBT001, FBT002
-        self._alive = False
+    def stop(self, *, wait: Literal[False]) -> None: ...
+    def stop(self, *, wait: bool = False) -> Coro[None] | None:
+        self.queue.shutdown()
         return self.queue.join() if wait else None
 
     def put(self, item: T) -> None:
-        if not self._alive:
-            msg = "Can't put something in a non-running Waterfall."
-            raise RuntimeError(msg) from None
-        self.queue.put_nowait(item)
+        try:
+            self.queue.put_nowait(item)
+        except asyncio.QueueShutDown as e:
+            msg = "Can't put something in a shut down Waterfall."
+            raise RuntimeError(msg) from e
+
+    async def _process_batch(self, queue_items: MutableSequence[T], tasks: set[asyncio.Task[Any]]) -> None:
+        t = asyncio.create_task(self.callback(queue_items))
+        tasks.add(t)
+        t.add_done_callback(tasks.remove)
+        for _ in range(len(queue_items)):
+            self.queue.task_done()
 
     async def _loop(self) -> None:
-        try:
-            _tasks: set[asyncio.Task[Any]] = set()
-            while self._alive:
-                queue_items: MutableSequence[T] = []
-                iter_start = time.monotonic()
+        _tasks: set[asyncio.Task[Any]] = set()
+        while True:
+            queue_items: MutableSequence[T] = []
+            iter_start = time.monotonic()
 
-                while (this_max_wait := (time.monotonic() - iter_start)) < self.max_wait:
-                    try:
-                        n = await asyncio.wait_for(self.queue.get(), this_max_wait)
-                    except TimeoutError:
-                        continue
-                    else:
-                        queue_items.append(n)
+            while (time.monotonic() - iter_start) < self.max_wait:
+                try:
+                    remaining_time = self.max_wait - (time.monotonic() - iter_start)
+                    n = await asyncio.wait_for(self.queue.get(), remaining_time)
+                except asyncio.QueueShutDown:
+                    # Queue is shut down, process remaining items and exit
+                    if queue_items:
+                        await self._process_batch(queue_items, _tasks)
+                    return
+                except TimeoutError:
+                    break
+                else:
+                    queue_items.append(n)
                     if len(queue_items) >= self.max_quantity:
                         break
 
-                    if not queue_items:
-                        continue
-
-                num_items = len(queue_items)
-
-                t = asyncio.create_task(self.callback(queue_items))
-                _tasks.add(t)
-                t.add_done_callback(_tasks.remove)
-
-                for _ in range(num_items):
-                    self.queue.task_done()
-
-        finally:
-            f = asyncio.create_task(self._finalize(), name="waterfall.finalizer")
-            await asyncio.wait_for(f, timeout=self.max_wait_finalize)
-
-    async def _finalize(self) -> None:
-        # WARNING: Do not allow an async context switch before the gather below
-
-        self._alive = False
-        remaining_items: MutableSequence[T] = []
-
-        while not self.queue.empty():
-            try:
-                ev = self.queue.get_nowait()
-            except asyncio.QueueEmpty:
-                # we should never hit this, asyncio queues know their size reliably when used appropriately.
-                break
-
-            remaining_items.append(ev)
-
-        if not remaining_items:
-            return
-
-        num_remaining = len(remaining_items)
-
-        pending_futures: list[asyncio.Task[Any]] = []
-
-        for chunk in (remaining_items[p : p + self.max_quantity] for p in range(0, num_remaining, self.max_quantity)):
-            fut = asyncio.create_task(self.callback(chunk))
-            pending_futures.append(fut)
-
-        gathered = asyncio.gather(*pending_futures)
-
-        try:
-            await asyncio.wait_for(gathered, timeout=self.max_wait_finalize)
-        except TimeoutError:
-            for task in pending_futures:
-                task.cancel()
-
-        for _ in range(num_remaining):
-            self.queue.task_done()
+            if queue_items:
+                await self._process_batch(queue_items, _tasks)

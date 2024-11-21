@@ -39,10 +39,6 @@ testpaths = [
 addopts = [
     "--strict-markers",
     "--strict-config",
-    "--numprocesses",
-    "auto",
-    "--dist",
-    "loadfile",
     "--maxfail",
     "1",
     "--verbosity",
@@ -51,7 +47,6 @@ addopts = [
     "10",
     "--durations-min",
     "1.0",
-    "--hypothesis-show-statistics",
 ]
 
 log_cli = true
@@ -152,9 +147,6 @@ ignore-decorators = [
 ]
 
 [tool.mypy]
-plugins = [
-    "numpy.typing.mypy_plugin",
-]
 python_version = "3.13"
 strict = true
 

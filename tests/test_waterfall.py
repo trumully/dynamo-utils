@@ -2,7 +2,6 @@ import asyncio
 from collections.abc import Sequence
 
 import pytest
-
 from dynamo_utils.waterfall import Waterfall
 
 
@@ -49,3 +48,22 @@ async def test_waterfall_max_wait():
     assert processed_items[0] == ["item1"]
 
     await waterfall.stop(wait=True)
+
+
+@pytest.mark.asyncio
+async def test_waterfall_put_in_shut_down():
+    processed_items: list[Sequence[str]] = []
+
+    async def process_batch(items: Sequence[str]) -> None:
+        processed_items.append(items)
+
+    waterfall: Waterfall[str] = Waterfall(max_wait=0.2, max_quantity=5, async_callback=process_batch)
+    waterfall.start()
+
+    waterfall.put("item1")
+    await waterfall.stop(wait=True)
+
+    with pytest.raises(RuntimeError):
+        waterfall.put("item2")
+    assert len(processed_items) == 1
+    assert processed_items[0] == ["item1"]
