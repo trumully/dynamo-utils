@@ -111,7 +111,11 @@ class LRU[K, V]:
         self.__cache: dict[K, V] = {}
         self.__maxsize = maxsize
 
-    def get[T: (Any, Missing)](self, key: K, default: T = MISSING, /) -> V | T:
+    @overload
+    def get(self, key: K, /) -> V: ...
+    @overload
+    def get[T](self, key: K, default: T, /) -> V | T: ...
+    def get[T](self, key: K, default: T | Missing = MISSING, /) -> V | T:
         try:
             self.__cache[key] = self.__cache.pop(key)
             return self.__cache[key]
@@ -119,7 +123,7 @@ class LRU[K, V]:
             # Raise if default is not set explicitly.
             if default is MISSING:
                 raise exc from None
-            return default
+            return default  # type: ignore[return-value]
 
     def __getitem__(self, key: K, /) -> V:
         self.__cache[key] = self.__cache.pop(key)
