@@ -148,6 +148,7 @@ ignore-decorators = [
 
 [tool.mypy]
 python_version = "3.13"
+exclude = ["^tests/"]
 strict = true
 
 # Disallow dynamic typing
