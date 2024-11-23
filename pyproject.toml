@@ -64,50 +64,12 @@ line-length = 120
 
 [tool.ruff.lint]
 select = [
-    "A",
-    "B",
-    "C",
-    "E",
-    "D",
-    "F",
-    "G",
-    "I",
-    "N",
-    "Q",
-    "S",
-    "T",
-    "W",
-    #   "ANN", # annotations handled by pyright
-    "ARG",
-    "BLE",
-    #   "COM", # commas handled by black
-    "DJ",
-    "DTZ",
-    "EM",
-    "ERA",
-    "EXE",
-    "FBT",
-    "ICN",
-    "INP",
-    "ISC",
-    "NPY",
-    #   "PD", # too many false positives
-    "PGH",
-    "PIE",
-    "PL",
-    "PT",
-    "PTH",
-    "PYI",
-    "RET",
-    "RSE",
-    "RUF",
-    "SIM",
-    "SLF",
-    "TCH",
-    "TID",
-    "TRY",
-    "UP",
-    "YTT",
+    "A", "B", "C", "E", "D", "F", "G", "I",
+    "N", "Q", "S", "T", "W", "ARG", "BLE",
+    "DJ", "DTZ", "EM", "ERA", "EXE", "FBT",
+    "ICN", "INP", "ISC", "NPY", "PGH", "PIE", "PERF",
+    "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF",
+    "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT",
 ]
 
 ignore = [
@@ -135,16 +97,9 @@ unfixable = [
     "F841", # I'm planning to use it
 ]
 
-[tool.ruff.lint.per-file-ignores]
-"tests/*" = [
-    "PLR2004", # Allow magic numbers
-]
+per-file-ignores = { "tests/*" = ["PLR2004"] }
 
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-ignore-decorators = [
-    "typing.overload",
-]
+pydocstyle = { "convention" = "google", "ignore-decorators" = ["typing.overload"] }
 
 [tool.mypy]
 python_version = "3.13"

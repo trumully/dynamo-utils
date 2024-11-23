@@ -26,9 +26,13 @@ import time
 from collections.abc import MutableSequence, Sequence
 from typing import Any, Literal, overload
 
+from .sentinel import Sentinel
 from .typedefs import Coro, CoroFn
 
 __all__ = ("Waterfall",)
+
+
+MISSING = Sentinel("MISSING")
 
 
 class Waterfall[T]:
@@ -47,10 +51,10 @@ class Waterfall[T]:
         self.max_quantity: int = max_quantity
         self.max_wait_finalize: int = max_wait_finalize
         self.callback: CoroFn[[Sequence[T]], Any] = async_callback
-        self.task: asyncio.Task[None] | None = None
+        self.task: asyncio.Task[None] | MISSING = MISSING  # type: ignore[valid-type]
 
     def start(self) -> None:
-        if self.task is not None:
+        if self.task is not MISSING:
             msg = "Waterfall is already running."
             raise RuntimeError(msg) from None
         self.task = asyncio.create_task(self._loop(), name="waterfall.loop")
