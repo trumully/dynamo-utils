@@ -27,10 +27,10 @@ from .sentinel import Sentinel
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from .typedefs import CoroFn
+    from dynamo_utils.typedefs import TaskCoroFn
 
 
-__all__ = ("lru_task_cache", "task_cache")
+__all__ = ("LRU", "lru_task_cache", "task_cache")
 
 
 MISSING = Sentinel("MISSING")
@@ -55,7 +55,7 @@ class HashedSequence(list[Hashable]):
         args: tuple[Hashable, ...],
         kwargs: Mapping[str, Hashable],
         fast_types: tuple[type, type] = (int, str),
-        _sentinel: MISSING = MISSING,  # type: ignore[valid-type]
+        _sentinel: Hashable = MISSING,
     ) -> HashedSequence | int | str:
         key: tuple[Any, ...] = args if not kwargs else (*args, _sentinel, *kwargs.items())
         first: int | str = key[0]
@@ -68,17 +68,14 @@ class CacheableTask[**P, T](Protocol):
     __slots__ = ()
 
     @property
-    def __wrapped__(self) -> CoroFn[P, T]: ...
+    def __wrapped__(self) -> TaskCoroFn[P, T]: ...
 
     def __get__[S: object](
-        self,
-        instance: S,
-        owner: type[S] | MISSING = MISSING,
+        self, instance: S, owner: type[S] | MISSING = MISSING
     ) -> CacheableTask[P, T] | BoundCachedTask[S, P, T]:
         return self if instance is MISSING else BoundCachedTask(self, instance)
 
-    __call__: CoroFn[P, T]
-
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]: ...
     def cache_clear(self) -> None: ...
     def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
 
@@ -88,19 +85,19 @@ class CachedTask[**P, T](CacheableTask[P, T]):
 
     __slots__ = ("__cache", "__dict__", "__ttl", "__weakref__", "__wrapped__")
 
-    __wrapped__: CoroFn[P, T]
+    __wrapped__: TaskCoroFn[P, T]
 
-    def __init__(self, call: CoroFn[P, T], /, ttl: float | MISSING = MISSING) -> None:
+    def __init__(self, call: TaskCoroFn[P, T], /, ttl: float | MISSING = MISSING) -> None:
         self.__cache: dict[HashedSequence | int | str, asyncio.Task[T]] = {}
         self.__wrapped__ = call
         self.__ttl = ttl
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:  # type: ignore[override]
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:
         key = HashedSequence.from_call(args, kwargs)
         try:
             task = self.__cache[key]
         except KeyError:
-            self.__cache[key] = task = asyncio.create_task(self.__wrapped__(*args, **kwargs))
+            self.__cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
             if self.__ttl is not MISSING:
                 call_after_ttl = partial(asyncio.get_event_loop().call_later, self.__ttl, self.__cache.pop, key)
                 task.add_done_callback(call_after_ttl)
@@ -117,47 +114,44 @@ class CachedTask[**P, T](CacheableTask[P, T]):
 class LRU[K, V]:
     """A Least Recently Used cache."""
 
-    __slots__ = ("__cache", "__maxsize")
-
     def __init__(self, maxsize: int, /) -> None:
-        self.__cache: dict[K, V] = {}
-        self.__maxsize = maxsize
+        self.cache: dict[K, V] = {}
+        self.maxsize = maxsize
 
     @overload
     def get(self, key: K, /) -> V: ...
     @overload
     def get[T](self, key: K, default: T, /) -> V | T: ...
-    def get[T](self, key: K, default: T | MISSING = MISSING, /) -> V | T:
-        try:
-            self.__cache[key] = self.__cache.pop(key)
-            return self.__cache[key]
-        except KeyError as exc:
-            # Raise if default is not set explicitly.
+    def get(self, key: K, default: Any = MISSING, /) -> Any:
+        if key not in self.cache:
             if default is MISSING:
-                raise exc from None
+                raise KeyError(key)
             return default
 
+        self.cache[key] = self.cache.pop(key)
+        return self.cache[key]
+
     def __getitem__(self, key: K, /) -> V:
-        self.__cache[key] = self.__cache.pop(key)
-        return self.__cache[key]
+        self.cache[key] = self.cache.pop(key)
+        return self.cache[key]
 
     def __setitem__(self, key: K, value: V, /) -> None:
-        self.__cache[key] = value
-        if len(self.__cache) > self.__maxsize:
-            self.__cache.pop(next(iter(self.__cache)))
+        self.cache[key] = value
+        if len(self.cache) > self.maxsize:
+            self.cache.pop(next(iter(self.cache)))
 
     def remove(self, key: K, /) -> None:
-        self.__cache.pop(key)
+        self.cache.pop(key, MISSING)
 
     def clear(self) -> None:
-        self.__cache.clear()
+        self.cache.clear()
 
 
 def _lru_evict(
     ttl: float,
     cache: LRU[HashedSequence | int | str, asyncio.Task[Any]],
     key: HashedSequence | int | str,
-    _task: MISSING = MISSING,  # type: ignore[valid-type]
+    _task: MISSING = MISSING,
 ) -> None:
     asyncio.get_event_loop().call_later(ttl, cache.remove, key)
 
@@ -167,11 +161,11 @@ class LRUCachedTask[**P, T](CacheableTask[P, T]):
 
     __slots__ = ("__cache", "__dict__", "__ttl", "__weakref__", "__wrapped__")
 
-    __wrapped__: CoroFn[P, T]
+    __wrapped__: TaskCoroFn[P, T]
 
     def __init__(
         self,
-        call: CoroFn[P, T],
+        call: TaskCoroFn[P, T],
         /,
         maxsize: int,
         ttl: float | MISSING = MISSING,
@@ -180,12 +174,12 @@ class LRUCachedTask[**P, T](CacheableTask[P, T]):
         self.__wrapped__ = call
         self.__ttl = ttl
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:  # type: ignore[override]
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:
         key = HashedSequence.from_call(args, kwargs)
         try:
             task = self.__cache[key]
         except KeyError:
-            self.__cache[key] = task = asyncio.create_task(self.__wrapped__(*args, **kwargs))
+            self.__cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
             if self.__ttl is not MISSING:
                 call_after_ttl = partial(_lru_evict, self.__ttl, self.__cache, key)
                 task.add_done_callback(call_after_ttl)
@@ -212,18 +206,14 @@ class BoundCachedTask[S, **P, T]:
         self.__setattr__("__doc__", task.__doc__)
 
     @property
-    def __wrapped__(self) -> CoroFn[P, T]:
+    def __wrapped__(self) -> TaskCoroFn[P, T]:
         return self._task.__wrapped__
 
     @property
     def __func__(self) -> CacheableTask[P, T]:
         return self._task
 
-    def __get__[S2: object](
-        self,
-        instance: S2,
-        owner: type[S2] | MISSING = MISSING,
-    ) -> BoundCachedTask[S2, P, T]:
+    def __get__[S2: object](self, instance: S2, owner: type[S2] | MISSING = MISSING) -> BoundCachedTask[S2, P, T]:
         return BoundCachedTask(self._task, instance)
 
     def cache_clear(self) -> None:
@@ -237,15 +227,12 @@ class BoundCachedTask[S, **P, T]:
 
 
 @overload
-def task_cache[**P, T](
-    *,
-    ttl: float | MISSING = MISSING,  # type: ignore[valid-type]
-) -> Callable[[CoroFn[P, T]], CacheableTask[P, T]]: ...
+def task_cache[**P, T](*, ttl: float | MISSING = MISSING) -> Callable[[TaskCoroFn[P, T]], CacheableTask[P, T]]: ...
 @overload
-def task_cache[**P, T](coro: CoroFn[P, T], /) -> CacheableTask[P, T]: ...
+def task_cache[**P, T](coro: TaskCoroFn[P, T], /) -> CacheableTask[P, T]: ...
 def task_cache[**P, T](
-    ttl: CoroFn[P, T] | float | MISSING = MISSING,  # type: ignore[valid-type]
-) -> Callable[[CoroFn[P, T]], CacheableTask[P, T]] | CacheableTask[P, T]:
+    ttl: TaskCoroFn[P, T] | float | MISSING = MISSING,
+) -> Callable[[TaskCoroFn[P, T]], CacheableTask[P, T]] | CacheableTask[P, T]:
     """Decorator to wrap a coroutine function in a cache with support for TTL."""
     if isinstance(ttl, float):
         ttl = max(0, ttl)
@@ -253,11 +240,8 @@ def task_cache[**P, T](
         fast_wrapper = CachedTask(ttl)
         update_wrapper(fast_wrapper, ttl)
         return fast_wrapper
-    elif ttl is MISSING:
-        msg = "First argument must be a float or a coroutine function"
-        raise TypeError(msg)
 
-    def decorator(coro: CoroFn[P, T]) -> CacheableTask[P, T]:
+    def decorator(coro: TaskCoroFn[P, T]) -> CacheableTask[P, T]:
         wrapper = CachedTask(coro, ttl)
         update_wrapper(wrapper, coro)
         return wrapper
@@ -267,16 +251,13 @@ def task_cache[**P, T](
 
 @overload
 def lru_task_cache[**P, T](
-    *,
-    ttl: float | MISSING = MISSING,  # type: ignore[valid-type]
-    maxsize: int = 1024,
-) -> Callable[[CoroFn[P, T]], CacheableTask[P, T]]: ...
+    *, ttl: float | MISSING = MISSING, maxsize: int = 1024
+) -> Callable[[TaskCoroFn[P, T]], CacheableTask[P, T]]: ...
 @overload
-def lru_task_cache[**P, T](coro: CoroFn[P, T], /) -> CacheableTask[P, T]: ...
+def lru_task_cache[**P, T](coro: TaskCoroFn[P, T], /) -> CacheableTask[P, T]: ...
 def lru_task_cache[**P, T](
-    ttl: CoroFn[P, T] | float | MISSING = MISSING,  # type: ignore[valid-type]
-    maxsize: int = 1024,
-) -> CacheableTask[P, T] | Callable[[CoroFn[P, T]], CacheableTask[P, T]]:
+    ttl: TaskCoroFn[P, T] | float | MISSING = MISSING, maxsize: int = 1024
+) -> CacheableTask[P, T] | Callable[[TaskCoroFn[P, T]], CacheableTask[P, T]]:
     """Decorator to wrap a coroutine function in a Least Recently Used cache with support for TTL."""
     if isinstance(ttl, float):
         ttl = max(0, ttl)
@@ -285,7 +266,7 @@ def lru_task_cache[**P, T](
         update_wrapper(fast_wrapper, ttl)
         return fast_wrapper
 
-    def decorator(coro: CoroFn[P, T]) -> CacheableTask[P, T]:
+    def decorator(coro: TaskCoroFn[P, T]) -> CacheableTask[P, T]:
         wrapper = LRUCachedTask(coro, maxsize, ttl)
         update_wrapper(wrapper, coro)
         return wrapper

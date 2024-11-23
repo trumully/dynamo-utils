@@ -31,7 +31,7 @@ class Sentinel:
         cls,
         name: str,
         /,
-        truthiness: bool | None = None,  # noqa: FBT001
+        truthiness: bool | None = None,
         repr: str | None = None,  # noqa: A002
         module_name: str | None = None,
     ) -> Self:
@@ -52,7 +52,6 @@ class Sentinel:
                 "_repr": repr,
                 "_module_name": module_name,
                 "_truthiness": truthiness,
-                "__module__": cls.__module__,  # Add this line
             },
         )
 
