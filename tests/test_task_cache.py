@@ -95,3 +95,24 @@ async def test_lru_task_cache():
     # This should cause a new call since 1 was evicted
     await cached_func(1)
     assert call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_bound_tasks():
+    call_count = 0
+
+    class Test:
+        @task_cache
+        async def cached_func(self, x: int) -> int:
+            nonlocal call_count
+            call_count += 1
+            return x * 2
+
+    obj = Test()
+    result1 = await obj.cached_func(5)
+    assert result1 == 10
+    assert call_count == 1
+
+    result2 = await obj.cached_func(5)
+    assert result2 == 10
+    assert call_count == 1

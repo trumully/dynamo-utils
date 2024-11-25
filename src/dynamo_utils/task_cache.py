@@ -72,8 +72,8 @@ class CacheableTask[**P, T](Protocol):
 
     def __get__[S: object](
         self, instance: S, owner: type[S] | MISSING = MISSING
-    ) -> CacheableTask[P, T] | BoundCachedTask[S, P, T]:
-        return self if instance is MISSING else BoundCachedTask(self, instance)
+    ) -> CacheableTask[P, T] | BoundCacheableTask[S, P, T]:
+        return self if instance is MISSING else BoundCacheableTask(self, instance)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]: ...
     def cache_clear(self) -> None: ...
@@ -193,17 +193,14 @@ class LRUCachedTask[**P, T](CacheableTask[P, T]):
         self.__cache.remove(key)
 
 
-class BoundCachedTask[S, **P, T]:
+class BoundCacheableTask[S, **P, T]:
     """A bound cached coroutine function."""
 
     __slots__ = ("__self__", "__weakref__", "_task")
 
-    def __init__(self, task: CacheableTask[P, T], __self__: S):
+    def __init__(self, task: CacheableTask[P, T], __self__: object):
         self._task = task
         self.__self__ = __self__
-
-        self.__setattr__("__annotations__", task.__annotations__)
-        self.__setattr__("__doc__", task.__doc__)
 
     @property
     def __wrapped__(self) -> TaskCoroFn[P, T]:
@@ -213,11 +210,23 @@ class BoundCachedTask[S, **P, T]:
     def __func__(self) -> CacheableTask[P, T]:
         return self._task
 
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:
-        return self._task(self.__self__, *args, **kwargs)  # type: ignore[arg-type]
+    @property
+    def __annotations__(self) -> dict[str, Any]:
+        return self._task.__annotations__
 
-    def __get__[S2: object](self, instance: S2, owner: type | MISSING = MISSING) -> BoundCachedTask[S2, P, T]:
-        return BoundCachedTask(self._task, instance)
+    @property
+    def __doc__(self) -> str:
+        return self._task.__doc__
+
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:
+        return self._task(*(self.__self__, *args), **kwargs)  # type: ignore[arg-type]
+
+    def __get__[S2: object](
+        self: BoundCacheableTask[S, P, T],
+        instance: S2,
+        owner: type | MISSING = MISSING,
+    ) -> BoundCacheableTask[S2, P, T]:
+        return BoundCacheableTask(self._task, instance)
 
     def cache_clear(self) -> None:
         self._task.cache_clear()
