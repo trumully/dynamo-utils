@@ -80,7 +80,7 @@ async def aiterclose(iterator: AsyncIterator[Any]) -> None:
         await iterator.__aiterclose__()
 
 
-async def process_async_iterable[T](iterable: AsyncIterCloseProtocol[T]) -> list[T]:
+async def process_async_iterable[T](iterable: AsyncIterator[T]) -> list[T]:
     """Safely process an async iterable with proper cleanup.
 
     Args:
