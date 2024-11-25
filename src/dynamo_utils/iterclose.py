@@ -9,7 +9,10 @@ import contextlib
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterable, AsyncIterator, Iterator, Sequence
+    from collections.abc import AsyncGenerator, AsyncIterator, Iterator
+
+    type _b[T] = dict[T, Any] | set[T] | frozenset[T] | list[T] | tuple[T, ...]  # noqa: PYI042
+    type AllowedAsyncIterable[T] = _b[T] | AsyncGenerator[T]
 
 
 class IterCloseProtocol[T](Protocol):
@@ -80,7 +83,7 @@ async def aiterclose(iterator: AsyncIterator[Any]) -> None:
         await iterator.__aiterclose__()
 
 
-async def process_async_iterable[T](iterable: AsyncIterable[T]) -> Sequence[T]:
+async def process_async_iterable[T](iterable: AllowedAsyncIterable[T]) -> list[T]:
     """Safely process an async iterable with proper cleanup.
 
     Args:
