@@ -213,7 +213,10 @@ class BoundCachedTask[S, **P, T]:
     def __func__(self) -> CacheableTask[P, T]:
         return self._task
 
-    def __get__[S2: object](self, instance: S2, owner: type[S2] | MISSING = MISSING) -> BoundCachedTask[S2, P, T]:
+    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[T]:
+        return self._task(self.__self__, *args, **kwargs)  # type: ignore[arg-type]
+
+    def __get__[S2: object](self, instance: S2, owner: type | MISSING = MISSING) -> BoundCachedTask[S2, P, T]:
         return BoundCachedTask(self._task, instance)
 
     def cache_clear(self) -> None:
