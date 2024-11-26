@@ -89,7 +89,7 @@ class TaskCache[**P, T]:
 
     def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None:
         key = HashedSequence.from_call(args, kwargs)
-        self.cache.pop(key)
+        self.cache.pop(key) if isinstance(self.cache, dict) else self.cache.remove(key)
 
 
 class BoundTaskCache[S, **P, T]:
