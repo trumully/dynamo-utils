@@ -21,6 +21,7 @@ requires-python = ">=3.13,<3.14"
 classifiers = [
     "Framework :: AsyncIO",
     "Intended Audience :: Developers",
+    "License :: OSI Approved :: The Unlicense (Unlicense)",
     "Natural Language :: English",
     "Typing :: Typed",
     "Programming Language :: Python :: 3 :: Only",
