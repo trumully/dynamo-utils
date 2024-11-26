@@ -22,7 +22,7 @@ from collections.abc import Hashable
 from functools import partial, update_wrapper
 from typing import TYPE_CHECKING, Any, overload
 
-from .sentinel import Sentinel
+from dynamo_utils.sentinel import Sentinel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
@@ -32,8 +32,6 @@ if TYPE_CHECKING:
 
 __all__ = ("LRU", "lru_task_cache", "task_cache")
 
-
-MISSING = Sentinel("MISSING")
 
 type CacheKey = HashedSequence | int | str
 
@@ -57,7 +55,7 @@ class HashedSequence(list[Hashable]):
         args: tuple[Hashable, ...],
         kwargs: Mapping[str, Hashable],
         fast_types: tuple[type, type] = (int, str),
-        _sentinel: Hashable = MISSING,
+        _sentinel: Hashable = object,
     ) -> HashedSequence | int | str:
         key: tuple[Any, ...] = args if not kwargs else (*args, _sentinel, *kwargs.items())
         first: int | str = key[0]
@@ -67,7 +65,7 @@ class HashedSequence(list[Hashable]):
 class TaskCache[**P, T]:
     """Base class for task caching."""
 
-    __slots__: tuple[str, ...] = ("__weakref__", "__dict__", "__wrapped__", "cache")
+    __slots__: tuple[str, ...] = ("__dict__", "__weakref__", "__wrapped__", "cache")
 
     __wrapped__: TaskCoroFn[P, T]
     cache: dict[CacheKey, asyncio.Task[T]] | LRU[CacheKey, asyncio.Task[T]]
@@ -93,7 +91,7 @@ class TaskCache[**P, T]:
 
 
 class BoundTaskCache[S, **P, T]:
-    __slots__ = ("__weakref__", "task", "__self__")
+    __slots__ = ("__self__", "__weakref__", "task")
 
     def __init__(self, task: TaskCache[P, T], instance: object):
         self.task = task
@@ -157,7 +155,7 @@ def _lru_evict(
     ttl: float,
     cache: LRU[HashedSequence | int | str, asyncio.Task[Any]],
     key: HashedSequence | int | str,
-    _task: MISSING = MISSING,
+    _task: None = None,
 ) -> None:
     asyncio.get_event_loop().call_later(ttl, cache.remove, key)
 
@@ -167,7 +165,7 @@ class LRUTaskCache[**P, T](TaskCache[P, T]):
 
     cache: LRU[CacheKey, asyncio.Task[T]]
 
-    def __init__(self, fn: TaskCoroFn[P, T], maxsize: int, ttl: float | MISSING = MISSING):
+    def __init__(self, fn: TaskCoroFn[P, T], maxsize: int, ttl: float | None = None):
         super().__init__(fn)
         self.cache: LRU[CacheKey, asyncio.Task[T]] = LRU(maxsize)
         self.ttl = ttl
@@ -178,10 +176,13 @@ class LRUTaskCache[**P, T](TaskCache[P, T]):
             task = self.cache[key]
         except KeyError:
             self.cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
-            if self.ttl is not MISSING:
+            if self.ttl is not None:
                 call_after_ttl = partial(_lru_evict, self.ttl, self.cache, key)
                 task.add_done_callback(call_after_ttl)
         return task
+
+
+MISSING = Sentinel("MISSING")
 
 
 class LRU[K, V]:
@@ -214,7 +215,7 @@ class LRU[K, V]:
             self.cache.pop(next(iter(self.cache)))
 
     def remove(self, key: K, /) -> None:
-        self.cache.pop(key, MISSING)
+        self.cache.pop(key, None)
 
     def clear(self) -> None:
         self.cache.clear()
@@ -225,12 +226,12 @@ def task_cache[**P, T](task_coro_fn: TaskCoroFn[P, T], /) -> TaskCache[P, T]: ..
 @overload
 def task_cache[**P, T](*, ttl: float) -> Callable[[TaskCoroFn[P, T]], TTLTaskCache[P, T]]: ...
 def task_cache[**P, T](
-    task_coro_fn: TaskCoroFn[P, T] | MISSING = MISSING,
+    task_coro_fn: TaskCoroFn[P, T] | None = None,
     *,
-    ttl: float | MISSING = MISSING,
+    ttl: float | None = None,
 ) -> Callable[[TaskCoroFn[P, T]], TaskCache[P, T]] | TaskCache[P, T]:
-    if task_coro_fn is not MISSING:
-        if ttl is not MISSING:
+    if task_coro_fn is not None:
+        if ttl is not None:
             msg = "Cannot specify ttl when using @task_cache without parentheses"
             raise TypeError(msg)
         wrapper = TaskCache(task_coro_fn)
@@ -249,16 +250,16 @@ def task_cache[**P, T](
 def lru_task_cache[**P, T](task_coro_fn: TaskCoroFn[P, T], /) -> LRUTaskCache[P, T]: ...
 @overload
 def lru_task_cache[**P, T](
-    *, maxsize: int = 1024, ttl: float | MISSING = MISSING
+    *, maxsize: int = 1024, ttl: float | None = None
 ) -> Callable[[TaskCoroFn[P, T]], LRUTaskCache[P, T]]: ...
 def lru_task_cache[**P, T](
-    task_coro_fn: TaskCoroFn[P, T] | MISSING = MISSING,
+    task_coro_fn: TaskCoroFn[P, T] | None = None,
     *,
     maxsize: int = 1024,
-    ttl: float | MISSING = MISSING,
+    ttl: float | None = None,
 ) -> Callable[[TaskCoroFn[P, T]], LRUTaskCache[P, T]] | LRUTaskCache[P, T]:
-    if task_coro_fn is not MISSING:
-        if ttl is not MISSING or maxsize != 1024:  # noqa: PLR2004
+    if task_coro_fn is not None:
+        if ttl is not None or maxsize != 1024:  # noqa: PLR2004
             msg = "Cannot specify ttl or maxsize when using @lru_task_cache without parentheses"
             raise TypeError(msg)
         wrapper = LRUTaskCache(task_coro_fn, maxsize)
