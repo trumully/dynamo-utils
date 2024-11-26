@@ -26,7 +26,7 @@ import time
 from collections.abc import MutableSequence, Sequence
 from typing import Any, Literal, overload
 
-from .typedefs import Coro, CoroFn
+from .typedefs import Coro, CoroFunc
 
 __all__ = ("Waterfall",)
 
@@ -38,7 +38,7 @@ class Waterfall[T]:
         self,
         max_wait: float,
         max_quantity: int,
-        async_callback: CoroFn[[Sequence[T]], Any],
+        async_callback: CoroFunc[[Sequence[T]], Any],
         *,
         max_wait_finalize: int = 3,
     ) -> None:
@@ -46,7 +46,7 @@ class Waterfall[T]:
         self.max_wait: float = max_wait
         self.max_quantity: int = max_quantity
         self.max_wait_finalize: int = max_wait_finalize
-        self.callback: CoroFn[[Sequence[T]], Any] = async_callback
+        self.callback: CoroFunc[[Sequence[T]], Any] = async_callback
         self.task: asyncio.Task[None] | None = None
 
     def start(self) -> None:

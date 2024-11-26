@@ -1,25 +1,25 @@
-import pickle
+import pickle  # noqa: S403
 
 from dynamo_utils.sentinel import Sentinel
 
 
-def test_sentinel_identity():
+def test_sentinel_identity() -> None:
     s1 = Sentinel("TEST_SENTINEL")
     s2 = Sentinel("TEST_SENTINEL")
 
     assert s1 is s2
     assert s1 == s2
-    assert isinstance(s1, s1)
-    assert isinstance(s1, s2)
+    assert isinstance(s1, s1)  # type: ignore[reportArgumentType]
+    assert isinstance(s1, s2)  # type: ignore[reportArgumentType]
 
 
-def test_sentinel_repr():
+def test_sentinel_repr() -> None:
     s = Sentinel("WITH_CUSTOM_REPR", repr="<CustomRepr>")
 
     assert repr(s) == "<CustomRepr>"
 
 
-def test_sentinel_truthiness():
+def test_sentinel_truthiness() -> None:
     s = Sentinel("TEST_SENTINEL")
 
     assert not bool(s)
@@ -29,7 +29,7 @@ def test_sentinel_truthiness():
     assert bool(s)
 
 
-def test_sentinel_pickle():
+def test_sentinel_pickle() -> None:
     original = Sentinel("PICKLE_TEST")
     pickled = pickle.dumps(original)
     unpickled = pickle.loads(pickled)  # noqa: S301
@@ -37,7 +37,7 @@ def test_sentinel_pickle():
     assert original is unpickled
 
 
-def test_sentinel_subclass():
+def test_sentinel_subclass() -> None:
     class MySentinel(Sentinel):
         pass
 

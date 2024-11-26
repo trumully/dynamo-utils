@@ -1,10 +1,12 @@
+from collections.abc import Sequence
+
 import pytest
 from dynamo_utils.iterclose import aiterclose, apreserve, iterclose, preserve, process_async_iterable
 
 
-def test_preserve():
+def test_preserve() -> None:
     class CustomIterator:
-        def __init__(self, items):
+        def __init__(self, items: Sequence[int]) -> None:
             self.items = items
             self.index = 0
             self.closed = False
@@ -29,9 +31,9 @@ def test_preserve():
 
 
 @pytest.mark.asyncio
-async def test_apreserve():
+async def test_apreserve() -> None:
     class CustomAsyncIterator:
-        def __init__(self, items):
+        def __init__(self, items: Sequence[int]) -> None:
             self.items = items
             self.index = 0
             self.closed = False
@@ -56,7 +58,7 @@ async def test_apreserve():
     assert not iterator.closed
 
 
-def test_iterclose():
+def test_iterclose() -> None:
     class ClosableIterator:
         def __init__(self):
             self.close_called = False
@@ -65,12 +67,12 @@ def test_iterclose():
             self.close_called = True
 
     iterator = ClosableIterator()
-    iterclose(iterator)
+    iterclose(iterator)  # type: ignore[reportArgumentType]
     assert iterator.close_called
 
 
 @pytest.mark.asyncio
-async def test_aiterclose():
+async def test_aiterclose() -> None:
     class AsyncClosableIterator:
         def __init__(self):
             self.close_called = False
@@ -79,14 +81,14 @@ async def test_aiterclose():
             self.close_called = True
 
     iterator = AsyncClosableIterator()
-    await aiterclose(iterator)
+    await aiterclose(iterator)  # type: ignore[reportArgumentType]
     assert iterator.close_called
 
 
 @pytest.mark.asyncio
-async def test_process_async_iterable():
+async def test_process_async_iterable() -> None:
     class CustomAsyncIterable:
-        def __init__(self, items):
+        def __init__(self, items: Sequence[int]) -> None:
             self.items = items
             self.index = 0
             self.close_called = False

@@ -18,21 +18,18 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Hashable
-from functools import partial, update_wrapper
-from typing import TYPE_CHECKING, Any, Concatenate, Protocol, cast, overload
+from functools import partial, wraps
+from typing import TYPE_CHECKING, Any, Protocol, overload
 
 from dynamo_utils.sentinel import Sentinel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from dynamo_utils.typedefs import TaskCoroFn
+    from dynamo_utils.typedefs import TaskCoroFunc, TaskFunc
 
 
 __all__ = ("LRU", "lru_task_cache", "task_cache")
-
-
-type CacheKey = HashedSequence | int | str
 
 
 class HashedSequence(list[Hashable]):
@@ -63,155 +60,6 @@ class HashedSequence(list[Hashable]):
         key: tuple[Any, ...] = args if not kwargs else (*args, _sentinel, *kwargs.items())
         first: (int | str) | Any = key[0]
         return first if len(key) == 1 and type(first) in fast_types else cls(key)
-
-
-class Cacheable[**P, R](Protocol):
-    __slots__: tuple[str, ...] = ()
-
-    __wrapped__: TaskCoroFn[P, R]
-
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]: ...
-    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
-
-
-class TaskCache[**P, R](Cacheable[P, R]):
-    """Base class for task caching."""
-
-    __slots__ = ("__dict__", "__weakref__", "__wrapped__", "cache")
-
-    __wrapped__: TaskCoroFn[P, R]
-
-    def __init__(self, fn: TaskCoroFn[P, R]):
-        self.__wrapped__ = fn
-        self.cache: dict[CacheKey, asyncio.Task[R]] = {}
-
-    def __get__[S](
-        self,
-        instance: S | None = None,
-        owner: type[S] | None = None,
-    ) -> TaskCache[P, R] | BoundTaskCache[S, P, R]:
-        if instance is None:
-            return self
-        return BoundTaskCache[S, P, R](cast(Cacheable[Concatenate[S, P], R], self), instance)
-
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
-        key = HashedSequence.from_call(args, kwargs)
-        try:
-            return self.cache[key]
-        except KeyError:
-            self.cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
-            return task
-
-    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None:
-        key = HashedSequence.from_call(args, kwargs)
-        self.cache.pop(key)
-
-
-class BoundTaskCache[S, **P, R]:
-    __slots__ = ("__self__", "__weakref__", "task")
-
-    def __init__(self, task: Cacheable[Concatenate[S, P], R], instance: S):
-        self.task = task
-        self.__self__ = instance
-
-    @property
-    def __wrapped__(self) -> TaskCoroFn[Concatenate[S, P], R]:
-        return self.task.__wrapped__
-
-    @property
-    def __func__(self) -> Cacheable[Concatenate[S, P], R]:
-        return self.task
-
-    def __get__[S2](
-        self: BoundTaskCache[S, P, R],
-        instance: S2,
-        owner: type[S2] | None = None,
-    ) -> BoundTaskCache[S2, P, R]:
-        task = cast(Cacheable[Concatenate[S2, P], R], self.task)
-        return BoundTaskCache[S2, P, R](task, instance)
-
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
-        return self.task(self.__self__, *args, **kwargs)
-
-    def __repr__(self) -> str:
-        name = getattr(self.__wrapped__, "__qualname__", "?")
-        return f"<bound task cache {name} of {self.__self__!r}>"
-
-    def __getattr__(self, name: str) -> Any:
-        return getattr(self.task, name)
-
-    @property
-    def __doc__(self) -> str | None:  # type: ignore[reportIncompatibleMethodOverride]
-        return self.task.__doc__
-
-    @property
-    def __annotations__(self) -> dict[str, Any]:  # type: ignore[reportIncompatibleMethodOverride]
-        return self.task.__annotations__
-
-
-class TTLTaskCache[**P, R](Cacheable[P, R]):
-    """Task cache with TTL support."""
-
-    __slots__ = ("__dict__", "__weakref__", "__wrapped__", "cache", "ttl")
-
-    def __init__(self, fn: TaskCoroFn[P, R], ttl: float):
-        self.ttl = ttl
-        self.__wrapped__ = fn
-        self.cache: dict[CacheKey, asyncio.Task[R]] = {}
-
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
-        key = HashedSequence.from_call(args, kwargs)
-        try:
-            return self.cache[key]
-        except KeyError:
-            self.cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
-            call_after_ttl = partial(
-                asyncio.get_running_loop().call_later,
-                self.ttl,
-                self.cache.pop,
-                key,
-            )
-            task.add_done_callback(call_after_ttl)  # type: ignore[reportArgumentType]
-            return task
-
-    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None:
-        key = HashedSequence.from_call(args, kwargs)
-        self.cache.pop(key)
-
-
-def _lru_evict(
-    ttl: float,
-    cache: LRU[HashedSequence | int | str, asyncio.Task[Any]],
-    key: HashedSequence | int | str,
-    _task: object,
-) -> None:
-    asyncio.get_event_loop().call_later(ttl, cache.remove, key)
-
-
-class LRUTaskCache[**P, R](Cacheable[P, R]):
-    """LRU task cache with optional TTL."""
-
-    __slots__ = ("__dict__", "__weakref__", "__wrapped__", "cache", "ttl")
-
-    def __init__(self, fn: TaskCoroFn[P, R], maxsize: int, ttl: float | None = None):
-        self.cache: LRU[CacheKey, asyncio.Task[R]] = LRU(maxsize)
-        self.ttl = ttl
-        self.__wrapped__ = fn
-
-    def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
-        key = HashedSequence.from_call(args, kwargs)
-        try:
-            return self.cache[key]
-        except KeyError:
-            self.cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
-            if self.ttl is not None:
-                call_after_ttl = partial(_lru_evict, self.ttl, self.cache, key)
-                task.add_done_callback(call_after_ttl)
-            return task
-
-    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None:
-        key = HashedSequence.from_call(args, kwargs)
-        self.cache.remove(key)
 
 
 MISSING = Sentinel("MISSING")
@@ -251,56 +99,85 @@ class LRU[K, V]:
         self.cache.clear()
 
 
+def _lru_evict(
+    ttl: float,
+    cache: LRU[HashedSequence | int | str, Any],
+    key: HashedSequence | int | str,
+    _task: object,
+) -> None:
+    asyncio.get_running_loop().call_later(ttl, cache.remove, key)
+
+
+_WRAP_ASSIGN = ("__module__", "__name__", "__qualname__", "__doc__")
+
+
+class DiscardableTaskFunc[**P, R](Protocol):
+    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
+
+
 @overload
-def task_cache[**P, R](ttl: TaskCoroFn[P, R], /) -> Cacheable[P, R]: ...
+def task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TaskFunc[P, R]: ...
 @overload
-def task_cache[**P, R](*, ttl: float) -> Callable[[TaskCoroFn[P, R]], Cacheable[P, R]]: ...
+def task_cache[**P, R](ttl: float | None = None) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]]: ...
 def task_cache[**P, R](
-    task_coro_fn: TaskCoroFn[P, R] | None = None,
-    *,
-    ttl: float | None = None,
-) -> Cacheable[P, R] | Callable[[TaskCoroFn[P, R]], Cacheable[P, R]]:
-    if task_coro_fn is not None:
-        if ttl is not None:
-            msg = "Cannot specify ttl when using @task_cache without parentheses"
-            raise TypeError(msg)
-        wrapper = TaskCache(task_coro_fn)
-        update_wrapper(wrapper, task_coro_fn)
-        return wrapper
+    ttl: float | TaskCoroFunc[P, R] | None = None,
+) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]] | TaskFunc[P, R]:
+    if isinstance(ttl, float):
+        ttl = None if ttl <= 0 else ttl
 
-    def decorator(fn: TaskCoroFn[P, R]) -> Cacheable[P, R]:
-        wrapper = TTLTaskCache(fn, ttl) if ttl is not None else TaskCache(fn)
-        update_wrapper(wrapper, fn)
-        return wrapper
+    def wrapper(coro: TaskCoroFunc[P, R]) -> TaskFunc[P, R]:
+        internal_cache: dict[HashedSequence | int | str, asyncio.Task[R]] = {}
 
-    return decorator
+        @wraps(coro, assigned=_WRAP_ASSIGN)
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
+            key = HashedSequence.from_call(args, kwargs)
+            try:
+                return internal_cache[key]
+            except KeyError:
+                internal_cache[key] = task = asyncio.ensure_future(coro(*args, **kwargs))
+                if ttl is not None and not callable(ttl):
+                    call_after_ttl = partial(
+                        asyncio.get_running_loop().call_later,
+                        ttl,
+                        internal_cache.pop,
+                        key,
+                    )
+                    task.add_done_callback(call_after_ttl)  # type: ignore[reportArgumentType]
+                return task
+
+        return wrapped
+
+    return wrapper(ttl) if callable(ttl) else wrapper
 
 
 @overload
-def lru_task_cache[**P, R](task_coro_fn: TaskCoroFn[P, R], /) -> LRUTaskCache[P, R]: ...
+def lru_task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TaskFunc[P, R]: ...
 @overload
 def lru_task_cache[**P, R](
-    *,
-    maxsize: int = 1024,
     ttl: float | None = None,
-) -> Callable[[TaskCoroFn[P, R]], LRUTaskCache[P, R]]: ...
+    maxsize: int = 1024,
+) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]]: ...
 def lru_task_cache[**P, R](
-    task_coro_fn: TaskCoroFn[P, R] | None = None,
-    *,
+    ttl: float | TaskCoroFunc[P, R] | None = None,
     maxsize: int = 1024,
-    ttl: float | None = None,
-) -> Callable[[TaskCoroFn[P, R]], LRUTaskCache[P, R]] | LRUTaskCache[P, R]:
-    if task_coro_fn is not None:
-        if ttl is not None or maxsize != 1024:  # noqa: PLR2004
-            msg = "Cannot specify ttl or maxsize when using @lru_task_cache without parentheses"
-            raise TypeError(msg)
-        wrapper = LRUTaskCache(task_coro_fn, maxsize)
-        update_wrapper(wrapper, task_coro_fn)
-        return wrapper
+) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]] | TaskFunc[P, R]:
+    if isinstance(ttl, float):
+        ttl = None if ttl <= 0 else ttl
 
-    def decorator(fn: TaskCoroFn[P, R]) -> LRUTaskCache[P, R]:
-        wrapper = LRUTaskCache(fn, maxsize, ttl)
-        update_wrapper(wrapper, fn)
-        return wrapper
+    def wrapper(coro: TaskCoroFunc[P, R]) -> TaskFunc[P, R]:
+        internal_cache: LRU[HashedSequence | int | str, asyncio.Task[R]] = LRU(maxsize)
 
-    return decorator
+        @wraps(coro, assigned=_WRAP_ASSIGN)
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
+            key = HashedSequence.from_call(args, kwargs)
+            try:
+                return internal_cache[key]
+            except KeyError:
+                internal_cache[key] = task = asyncio.ensure_future(coro(*args, **kwargs))
+                if ttl is not None and not callable(ttl):
+                    task.add_done_callback(partial(_lru_evict, ttl, internal_cache, key))
+                return task
+
+        return wrapped
+
+    return wrapper(ttl) if callable(ttl) else wrapper

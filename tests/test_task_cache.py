@@ -4,7 +4,7 @@ import pytest
 from dynamo_utils.task_cache import LRU, lru_task_cache, task_cache
 
 
-def test_lru_get():
+def test_lru_get() -> None:
     cache: LRU[str, int] = LRU(2)
     cache["a"] = 1
     cache["b"] = 2
@@ -19,7 +19,7 @@ def test_lru_get():
 
 
 @pytest.mark.asyncio
-async def test_basic_task_cache():
+async def test_basic_task_cache() -> None:
     call_count = 0
 
     @task_cache
@@ -45,7 +45,7 @@ async def test_basic_task_cache():
 
 
 @pytest.mark.asyncio
-async def test_task_cache_ttl():
+async def test_task_cache_ttl() -> None:
     call_count = 0
 
     @task_cache(ttl=0.1)
@@ -74,7 +74,7 @@ async def test_task_cache_ttl():
 
 
 @pytest.mark.asyncio
-async def test_lru_task_cache():
+async def test_lru_task_cache() -> None:
     call_count = 0
 
     @lru_task_cache(maxsize=2)
@@ -98,26 +98,26 @@ async def test_lru_task_cache():
 
 
 @pytest.mark.asyncio
-async def test_bound_tasks():
-    call_count = 0
-
+async def test_bound_tasks() -> None:
     class Test:
+        def __init__(self) -> None:
+            self.call_count = 0
+
         @task_cache
         async def cached_func(self, x: int) -> int:
-            nonlocal call_count
-            call_count += 1
+            self.call_count += 1
             return x * 2
 
     obj = Test()
     result1 = await obj.cached_func(5)
     assert result1 == 10
-    assert call_count == 1
+    assert obj.call_count == 1
 
     result2 = await obj.cached_func(5)
     assert result2 == 10
-    assert call_count == 1
+    assert obj.call_count == 1
 
     new_obj = Test()
     result3 = await new_obj.cached_func(5)
     assert result3 == 10
-    assert call_count == 2
+    assert new_obj.call_count == 1

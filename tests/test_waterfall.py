@@ -6,7 +6,7 @@ from dynamo_utils.waterfall import Waterfall
 
 
 @pytest.mark.asyncio
-async def test_waterfall_batch_processing():
+async def test_waterfall_batch_processing() -> None:
     processed_items: list[Sequence[str]] = []
 
     async def process_batch(items: Sequence[str]) -> None:
@@ -32,7 +32,7 @@ async def test_waterfall_batch_processing():
 
 
 @pytest.mark.asyncio
-async def test_waterfall_max_wait():
+async def test_waterfall_max_wait() -> None:
     processed_items: list[Sequence[str]] = []
 
     async def process_batch(items: Sequence[str]) -> None:
@@ -51,7 +51,7 @@ async def test_waterfall_max_wait():
 
 
 @pytest.mark.asyncio
-async def test_waterfall_put_in_shut_down():
+async def test_waterfall_put_in_shut_down() -> None:
     processed_items: list[Sequence[str]] = []
 
     async def process_batch(items: Sequence[str]) -> None:
