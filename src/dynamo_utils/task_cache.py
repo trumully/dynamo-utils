@@ -87,6 +87,10 @@ class TaskCache[**P, T]:
             self.cache[key] = task = asyncio.ensure_future(self.__wrapped__(*args, **kwargs))
         return task
 
+    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None:
+        key = HashedSequence.from_call(args, kwargs)
+        self.cache.pop(key)
+
 
 class BoundTaskCache[S, **P, T]:
     __slots__ = ("__weakref__", "task", "__self__")
