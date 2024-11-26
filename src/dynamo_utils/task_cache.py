@@ -127,7 +127,8 @@ class BoundTaskCache[S, **P, R]:
         instance: S2,
         owner: type[S2] | None = None,
     ) -> BoundTaskCache[S2, P, R]:
-        return BoundTaskCache[S2, P, R](self.task, instance)
+        task = cast(Cacheable[Concatenate[S2, P], R], self.task)
+        return BoundTaskCache[S2, P, R](task, instance)
 
     def __call__(self, *args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
         return self.task(self.__self__, *args, **kwargs)
