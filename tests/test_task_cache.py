@@ -116,3 +116,8 @@ async def test_bound_tasks():
     result2 = await obj.cached_func(5)
     assert result2 == 10
     assert call_count == 1
+
+    new_obj = Test()
+    result3 = await new_obj.cached_func(5)
+    assert result3 == 10
+    assert call_count == 2
