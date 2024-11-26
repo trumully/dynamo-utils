@@ -2,21 +2,61 @@ name: CI
 
 on:
   push:
-    branches:
-    - main
+    branches: [ main ]
   pull_request:
     types: [opened, reopened, synchronize]
-    branches:
-    - main
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  ci:
+  ruff:
     runs-on: ubuntu-22.04
-    name: CI
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/ruff-action@d0a0e814ec17e92d33be7d24dd922b479f1bcd38
+        with:
+          args: 'format --check --output-format github'
+      - uses: astral-sh/ruff-action@d0a0e814ec17e92d33be7d24dd922b479f1bcd38
+        with:
+          args: 'check'
+
+  check:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+    
+    name: Check 3.13
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: ".python-version"
+
+      - name: Set up node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '16'
+
+      - name: Install pyright
+        run: |
+          npm install -g pyright
+      
+      - name: Run pyright
+        run: |
+          pyright
+
+      - name: Verify no CRLF line endings
+        run: |
+          ! $(find . ! -path "./.git/*" -not -type d -exec file "{}" ";" |& grep -q " CRLF ")
+
+  test:
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
 
@@ -24,24 +64,13 @@ jobs:
         uses: astral-sh/setup-uv@v3
         with:
           enable-cache: true
-          cache-dependency-glob: "uv.lock"
+          cache-dependency-glob: 'uv.lock'
       
-      - name: "Set up Python"
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version-file: ".python-version"
+          python-version-file: '.python-version'
 
-      - name: Install project
-        run: uv sync --all-extras --dev
-
-      - name: Lint
-        run: uv run ruff check --output-format github
-
-      - name: Type Check
-        run: uv run mypy src/
-
-      - name: Test
-        run: uv run pytest
-        
-
-      
+      - name: Run tests
+        run: |
+          uv run pytest

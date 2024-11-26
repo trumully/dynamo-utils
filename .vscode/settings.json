@@ -1,6 +1,0 @@
-{
-    // False positives with sentinels
-    "python.analysis.diagnosticSeverityOverrides": {
-        "reportInvalidTypeForm": "none",
-    }
-}
