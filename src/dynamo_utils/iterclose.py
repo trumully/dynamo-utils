@@ -6,7 +6,7 @@ See: https://peps.python.org/pep-0533
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Iterator
@@ -68,15 +68,25 @@ async def apreserve[T](iterator: AsyncIterator[T]) -> AsyncIterator[AsyncIterato
     yield PreservedAsyncIterator(iterator)
 
 
+@runtime_checkable
+class IterCloseable(Protocol):
+    def __iterclose__(self) -> None: ...
+
+
+@runtime_checkable
+class AsyncIterCloseable(Protocol):
+    async def __aiterclose__(self) -> None: ...
+
+
 def iterclose(iterator: Iterator[Any]) -> None:
     """Explicitly close an iterator if it supports __iterclose__."""
-    if hasattr(iterator, "__iterclose__"):
+    if isinstance(iterator, IterCloseable):
         iterator.__iterclose__()
 
 
 async def aiterclose(iterator: AsyncIterator[Any]) -> None:
     """Explicitly close an async iterator if it supports __aiterclose__."""
-    if hasattr(iterator, "__aiterclose__"):
+    if isinstance(iterator, AsyncIterCloseable):
         await iterator.__aiterclose__()
 
 
@@ -89,7 +99,7 @@ async def process_async_iterable[T](iterable: AsyncIterator[T]) -> list[T]:
     Returns:
         A sequence containing all items from the iterable
     """
-    iterator = iterable.__aiter__()
+    iterator = aiter(iterable)
     try:
         return [item async for item in iterator]
     finally:

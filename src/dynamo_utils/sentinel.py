@@ -22,10 +22,7 @@ if TYPE_CHECKING:
 class Sentinel:
     """A unique sentinel value that maintains identity across copies and pickle operations."""
 
-    _module_name: str
-    _name: str
-    _repr: str
-    _truthiness: bool
+    __slots__ = ("_module_name", "_name", "_repr", "_truthiness")
 
     def __new__(
         cls,
@@ -55,7 +52,7 @@ class Sentinel:
             },
         )
 
-        instance: Self = super().__new__(instance_type)
+        instance: Self = super().__new__(instance_type)  # type: ignore[reportArgumentType]
         instance.__class__ = instance_type
 
         with _lock:
