@@ -1,3 +1,4 @@
-from . import iterclose, sentinel, task_cache, typedefs, waterfall
-
-__all__ = ("iterclose", "sentinel", "task_cache", "typedefs", "waterfall")
+__title__ = "dynamo_utils"
+__author__ = "Truman Mulholland"
+__license__ = "Unlicense"
+__version__ = "2024.11.27"

@@ -1,23 +1,32 @@
 [build-system]
-requires = [
-    "hatchling",
-]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/dynamo_utils/__init__.py"
+
+[tool.hatch.build.targets.wheel]
+packages = [ "src/dynamo_utils" ]
 
 [project]
 name = "dynamo-utils"
-version = "0.1.0"
-description = "Utility for my discord bot"
+dynamic = ["version"]
+authors = [
+    { name = "Truman Mulholland", email = "truman.mulholland@gmail.com" }
+]
+description = "Utilities for my Discord bot"
+license = { text = "Unlicense" }
 readme = "README.md"
-license = { file = "LICENSE" }
-requires-python = ">=3.13"
-dependencies = [
+requires-python = ">=3.13,<3.14"
+classifiers = [
+    "Framework :: AsyncIO",
+    "Intended Audience :: Developers",
+    "Natural Language :: English",
+    "Typing :: Typed",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.13"
 ]
-
-[tool.hatch.build.targets.wheel]
-packages = [
-    "src/dynamo_utils",
-]
+urls = {  "Homepage" = "https://github.com/trumully/dynamo-utils", "Issue Tracker" = "https://github.com/trumully/dynamo-utils/issues", "Source Code" = "https://github.com/trumully/dynamo-utils" }
 
 [dependency-groups]
 dev = [
@@ -41,16 +50,7 @@ addopts = [
     "1",
     "--verbosity",
     "2",
-    "--durations",
-    "10",
-    "--durations-min",
-    "1.0",
 ]
-
-log_cli = true
-log_cli_level = "INFO"
-log_cli_format = "%(asctime)s [%(levelname)8s] %(message)s (%(filename)s:%(lineno)s)"
-log_cli_date_format = "%Y-%m-%d %H:%M:%S"
 
 
 [tool.ruff]
@@ -83,17 +83,21 @@ ignore = [
     "RET508",
     "RUF029",  # Some interfaces need an async method
     "S101",  # Allow assert
-    "ERA001",  # Allow commented out code
     "PLC0415",  # Top-of-file imports are not always best
 ]
 
 unfixable = [
+    "E501",  # Handled by ruff format
     "F841", # I'm planning to use it
+    "ERA",  # Allow commented code
 ]
+
+[tool.ruff.format]
+line-ending = "lf"
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = [
-    "PLR2004",
+    "PLC1901", "PLR2004", "PLR6301", "S", "TID252"
 ]
 
 [tool.ruff.lint.pydocstyle]
@@ -116,10 +120,14 @@ convention = "google"
 
 [tool.pyright]
 include = ["src"]
+exclude = [
+    "**/__pycache__",
+    "build",
+    "dist",
+]
 pythonVersion = "3.13"
 typeCheckingMode = "strict"
 pythonPlatform = "All"
-reportCallInDefaultInitializer = "warning"
 reportImportCycles = "error"
 reportPropertyTypeMismatch = "error"
 reportShadowedImports = "error"
