@@ -1,4 +1,4 @@
-import pickle  # noqa: S403
+import pickle
 
 from dynamo_utils.sentinel import Sentinel
 
@@ -32,7 +32,7 @@ def test_sentinel_truthiness() -> None:
 def test_sentinel_pickle() -> None:
     original = Sentinel("PICKLE_TEST")
     pickled = pickle.dumps(original)
-    unpickled = pickle.loads(pickled)  # noqa: S301
+    unpickled = pickle.loads(pickled)
 
     assert original is unpickled
 
