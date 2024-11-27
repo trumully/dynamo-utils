@@ -19,14 +19,14 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Hashable
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Protocol, overload
+from typing import TYPE_CHECKING, Any, Protocol, cast, overload
 
 from dynamo_utils.sentinel import Sentinel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from dynamo_utils.typedefs import TaskCoroFunc, TaskFunc
+    from dynamo_utils.typedefs import Coro, TaskCoroFunc
 
 
 __all__ = ("LRU", "lru_task_cache", "task_cache")
@@ -111,8 +111,9 @@ def _lru_evict(
 _WRAP_ASSIGN = ("__module__", "__name__", "__qualname__", "__doc__")
 
 
-class DiscardableTaskFunc[**P, R](Protocol):
-    def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
+class TaskFunc[**P, R](Protocol):
+    def __call__(self, *args: Any, **kwargs: Any) -> Coro[R] | asyncio.Task[R]: ...
+    def discard(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
 
 
 @overload
@@ -145,7 +146,13 @@ def task_cache[**P, R](
                     task.add_done_callback(call_after_ttl)  # type: ignore[reportArgumentType]
                 return task
 
-        return wrapped
+        def discard(*args: P.args, **kwargs: P.kwargs) -> None:
+            key = HashedSequence.from_call(args, kwargs)
+            internal_cache.pop(key, None)
+
+        _wrapped = cast(TaskFunc[P, R], wrapped)
+        _wrapped.discard = discard
+        return _wrapped
 
     return wrapper(ttl) if callable(ttl) else wrapper
 
@@ -178,6 +185,12 @@ def lru_task_cache[**P, R](
                     task.add_done_callback(partial(_lru_evict, ttl, internal_cache, key))
                 return task
 
-        return wrapped
+        def discard(*args: P.args, **kwargs: P.kwargs) -> None:
+            key = HashedSequence.from_call(args, kwargs)
+            internal_cache.remove(key)
+
+        _wrapped = cast(TaskFunc[P, R], wrapped)
+        _wrapped.discard = discard
+        return _wrapped
 
     return wrapper(ttl) if callable(ttl) else wrapper

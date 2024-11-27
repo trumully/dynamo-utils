@@ -38,10 +38,16 @@ async def test_basic_task_cache() -> None:
     assert result2 == 10
     assert call_count == 1
 
-    # Different args should execute new call
-    result3 = await cached_func(7)
-    assert result3 == 14
+    # Discarding should result in a new call
+    cached_func.discard(5)
+    result3 = await cached_func(5)
+    assert result3 == 10
     assert call_count == 2
+
+    # Different args should execute new call
+    result4 = await cached_func(7)
+    assert result4 == 14
+    assert call_count == 3
 
 
 @pytest.mark.asyncio
