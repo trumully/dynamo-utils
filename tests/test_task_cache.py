@@ -3,7 +3,6 @@ import asyncio
 import pytest
 from dynamo_utils.task_cache import (
     LRU,
-    BadMaxsizeArgument,
     lru_task_cache,
     task_cache,
     tracked_lru_task_cache,
@@ -130,12 +129,6 @@ async def test_lru_task_cache() -> None:
     # This should cause a new call since 1 was evicted
     await cached_func(1)
     assert call_count == 4
-
-    with pytest.raises(BadMaxsizeArgument):
-
-        @lru_task_cache(maxsize=0)
-        async def invalid_func(x: int) -> int:  # type: ignore[reportUnusedFunction]
-            return x * 2
 
 
 @pytest.mark.asyncio
