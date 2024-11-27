@@ -19,17 +19,23 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Hashable
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Protocol, overload
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from dynamo_utils.sentinel import Sentinel
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from dynamo_utils.typedefs import TaskCoroFunc, TaskFunc
+    from dynamo_utils.typedefs import Coro, TaskCoroFunc
 
 
-__all__ = ("LRU", "lru_task_cache", "task_cache")
+__all__ = (
+    "LRU",
+    "lru_task_cache",
+    "task_cache",
+    "tracked_lru_task_cache",
+    "tracked_task_cache",
+)
 
 
 class HashedSequence(list[Hashable]):
@@ -99,6 +105,17 @@ class LRU[K, V]:
         self.cache.clear()
 
 
+class CacheStats:
+    __slots__ = ("hits", "misses")
+
+    def __init__(self) -> None:
+        self.hits = 0
+        self.misses = 0
+
+    def __repr__(self) -> str:
+        return f"CacheStats(hits={self.hits}, misses={self.misses})"
+
+
 def _lru_evict(
     ttl: float,
     cache: LRU[HashedSequence | int | str, Any],
@@ -111,8 +128,47 @@ def _lru_evict(
 _WRAP_ASSIGN = ("__module__", "__name__", "__qualname__", "__doc__")
 
 
-class DiscardableTaskFunc[**P, R](Protocol):
+class TaskFunc[**P, R]:
+    """A function that returns a cached task.
+
+    This class is used to wrap coroutine-like objects in functions that return
+    preemptively cached tasks.
+
+    Methods:
+        cache_discard: Remove a cache entry based on the arguments passed to the
+                       decorated coroutine.
+    """
+
+    __slots__ = ("_task",)
+
+    def __init__(self, task: TaskCoroFunc[P, R]) -> None:
+        self._task = task
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Coro[R] | asyncio.Task[R]:
+        return self._task(*args, **kwargs)
+
     def cache_discard(self, *args: P.args, **kwargs: P.kwargs) -> None: ...
+
+    def __repr__(self) -> str:
+        return f"<cached task {getattr(self._task, '__qualname__', '?')}>"
+
+
+class TrackedTaskFunc[**P, R](TaskFunc[P, R]):
+    """A function that returns a cached task.
+
+    This class is used to wrap coroutine-like objects in functions that return
+    preemptively cached tasks.
+
+    Methods:
+        cache_discard: Remove a cache entry based on the arguments passed to the
+                       decorated coroutine.
+        cache_stats: Return the cache hit and miss statistics.
+    """
+
+    def cache_stats(self) -> CacheStats: ...
+
+    def __repr__(self) -> str:
+        return f"<cached task {getattr(self._task, '__qualname__', '?')} {self.cache_stats()!r}>"
 
 
 @overload
@@ -122,6 +178,21 @@ def task_cache[**P, R](ttl: float | None = None) -> Callable[[TaskCoroFunc[P, R]
 def task_cache[**P, R](
     ttl: float | TaskCoroFunc[P, R] | None = None,
 ) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]] | TaskFunc[P, R]:
+    """Cache the results of the decorated coroutine.
+
+    Decorator that alters the behavior of the decorated coroutine to be a function
+    returning cached tasks.
+
+    This function comes with an optional discard method to remove a cache entry
+    based on the arguments passed to the decorated coroutine.
+
+    Parameters:
+        ttl (float | None): The time-to-live for the cache entry. Defaults to None (forever).
+
+    Returns:
+        A decorator that wraps coroutine-like objects in functions that return preemptively
+        cached tasks.
+    """
     if isinstance(ttl, float):
         ttl = None if ttl <= 0 else ttl
 
@@ -145,7 +216,13 @@ def task_cache[**P, R](
                     task.add_done_callback(call_after_ttl)  # type: ignore[reportArgumentType]
                 return task
 
-        return wrapped
+        def cache_discard(*args: P.args, **kwargs: P.kwargs) -> None:
+            key = HashedSequence.from_call(args, kwargs)
+            internal_cache.pop(key, None)
+
+        _wrapped = cast(TaskFunc[P, R], wrapped)
+        _wrapped.cache_discard = cache_discard
+        return _wrapped
 
     return wrapper(ttl) if callable(ttl) else wrapper
 
@@ -161,6 +238,24 @@ def lru_task_cache[**P, R](
     ttl: float | TaskCoroFunc[P, R] | None = None,
     maxsize: int = 1024,
 ) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]] | TaskFunc[P, R]:
+    """Cache the results of the decorated coroutine.
+
+    Decorator that alters the behavior of the decorated coroutine to be a function
+    returning cached tasks.
+
+    This function comes with an optional discard method to remove a cache entry
+    based on the arguments passed to the decorated coroutine.
+
+    Tasks are evicted by LRU and TTL.
+
+    Parameters:
+        ttl (float | None): The time-to-live for the cache entry. Defaults to None (forever).
+        maxsize (int): The maximum number of cache entries to keep. Supersedes ttl eviction.
+
+    Returns:
+        A decorator that wraps coroutine-like objects in functions that return preemptively
+        cached tasks.
+    """
     if isinstance(ttl, float):
         ttl = None if ttl <= 0 else ttl
 
@@ -178,6 +273,146 @@ def lru_task_cache[**P, R](
                     task.add_done_callback(partial(_lru_evict, ttl, internal_cache, key))
                 return task
 
-        return wrapped
+        def cache_discard(*args: P.args, **kwargs: P.kwargs) -> None:
+            key = HashedSequence.from_call(args, kwargs)
+            internal_cache.remove(key)
+
+        _wrapped = cast(TaskFunc[P, R], wrapped)
+        _wrapped.cache_discard = cache_discard
+        return _wrapped
+
+    return wrapper(ttl) if callable(ttl) else wrapper
+
+
+@overload
+def tracked_task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TrackedTaskFunc[P, R]: ...
+@overload
+def tracked_task_cache[**P, R](ttl: float | None = None) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]]: ...
+def tracked_task_cache[**P, R](
+    ttl: float | TaskCoroFunc[P, R] | None = None,
+) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]] | TrackedTaskFunc[P, R]:
+    """Cache the results of the decorated coroutine.
+
+    Decorator that alters the behavior of the decorated coroutine to be a function
+    returning cached tasks.
+
+    This function comes with an optional discard method to remove a cache entry
+    based on the arguments passed to the decorated coroutine. Furthermore, cache
+    hits and misses are tracked and viewable via the cache_stats method.
+
+    Parameters:
+        ttl (float | None): The time-to-live for the cache entry. Defaults to None (forever).
+
+    Returns:
+        A decorator that wraps coroutine-like objects in functions that return preemptively
+        cached tasks.
+    """
+    if isinstance(ttl, float):
+        ttl = None if ttl <= 0 else ttl
+
+    def wrapper(coro: TaskCoroFunc[P, R]) -> TrackedTaskFunc[P, R]:
+        internal_cache: dict[HashedSequence | int | str, asyncio.Task[R]] = {}
+        stats = CacheStats()
+
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
+            key = HashedSequence.from_call(args, kwargs)
+            try:
+                task = internal_cache[key]
+            except KeyError:
+                stats.misses += 1
+                internal_cache[key] = task = asyncio.ensure_future(coro(*args, **kwargs))
+                if ttl is not None and not callable(ttl):
+                    call_after_ttl = partial(
+                        asyncio.get_running_loop().call_later,
+                        ttl,
+                        internal_cache.pop,
+                        key,
+                    )
+                    task.add_done_callback(call_after_ttl)  # type: ignore[reportArgumentType]
+            else:
+                stats.hits += 1
+            return task
+
+        def cache_discard(*args: P.args, **kwargs: P.kwargs) -> None:
+            key = HashedSequence.from_call(args, kwargs)
+            stats.misses = 0
+            stats.hits = 0
+            internal_cache.pop(key, None)
+
+        def cache_stats() -> CacheStats:
+            return stats
+
+        _wrapped = cast(TrackedTaskFunc[P, R], wrapped)
+        _wrapped.cache_discard = cache_discard
+        _wrapped.cache_stats = cache_stats
+        return _wrapped
+
+    return wrapper(ttl) if callable(ttl) else wrapper
+
+
+@overload
+def tracked_lru_task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TrackedTaskFunc[P, R]: ...
+@overload
+def tracked_lru_task_cache[**P, R](
+    ttl: float | None = None,
+    maxsize: int = 1024,
+) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]]: ...
+def tracked_lru_task_cache[**P, R](
+    ttl: float | TaskCoroFunc[P, R] | None = None,
+    maxsize: int = 1024,
+) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]] | TrackedTaskFunc[P, R]:
+    """Cache the results of the decorated coroutine.
+
+    Decorator that alters the behavior of the decorated coroutine to be a function
+    returning cached tasks.
+
+    This function comes with an optional discard method to remove a cache entry
+    based on the arguments passed to the decorated coroutine. Furthermore, cache
+    hits and misses are tracked and viewable via the cache_stats method.
+
+    Tasks are evicted by LRU and TTL.
+
+    Parameters:
+        ttl (float | None): The time-to-live for the cache entry. Defaults to None (forever).
+        maxsize (int): The maximum number of cache entries to keep. Supersedes ttl eviction.
+
+    Returns:
+        A decorator that wraps coroutine-like objects in functions that return preemptively
+        cached tasks.
+    """
+    if isinstance(ttl, float):
+        ttl = None if ttl <= 0 else ttl
+
+    def wrapper(coro: TaskCoroFunc[P, R]) -> TrackedTaskFunc[P, R]:
+        internal_cache: LRU[HashedSequence | int | str, asyncio.Task[R]] = LRU(maxsize)
+        stats = CacheStats()
+
+        @wraps(coro, assigned=_WRAP_ASSIGN)
+        def wrapped(*args: P.args, **kwargs: P.kwargs) -> asyncio.Task[R]:
+            key = HashedSequence.from_call(args, kwargs)
+            try:
+                task = internal_cache[key]
+            except KeyError:
+                stats.misses += 1
+                internal_cache[key] = task = asyncio.ensure_future(coro(*args, **kwargs))
+                if ttl is not None and not callable(ttl):
+                    task.add_done_callback(partial(_lru_evict, ttl, internal_cache, key))
+            else:
+                stats.hits += 1
+            return task
+
+        def cache_discard(*args: P.args, **kwargs: P.kwargs) -> None:
+            key = HashedSequence.from_call(args, kwargs)
+            stats.misses = 0
+            stats.hits = 0
+            internal_cache.remove(key)
+
+        def cache_stats() -> CacheStats:
+            return stats
+
+        _wrapped = cast(TrackedTaskFunc[P, R], wrapped)
+        _wrapped.cache_discard = cache_discard
+        _wrapped.cache_stats = cache_stats
+        return _wrapped
 
     return wrapper(ttl) if callable(ttl) else wrapper

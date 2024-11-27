@@ -1,7 +1,13 @@
 import asyncio
 
 import pytest
-from dynamo_utils.task_cache import LRU, lru_task_cache, task_cache
+from dynamo_utils.task_cache import (
+    LRU,
+    lru_task_cache,
+    task_cache,
+    tracked_lru_task_cache,
+    tracked_task_cache,
+)
 
 
 def test_lru_get() -> None:
@@ -38,10 +44,16 @@ async def test_basic_task_cache() -> None:
     assert result2 == 10
     assert call_count == 1
 
-    # Different args should execute new call
-    result3 = await cached_func(7)
-    assert result3 == 14
+    # Discarding should result in a new call
+    cached_func.cache_discard(5)
+    result3 = await cached_func(5)
+    assert result3 == 10
     assert call_count == 2
+
+    # Different args should execute new call
+    result4 = await cached_func(7)
+    assert result4 == 14
+    assert call_count == 3
 
 
 @pytest.mark.asyncio
@@ -74,6 +86,28 @@ async def test_task_cache_ttl() -> None:
 
 
 @pytest.mark.asyncio
+async def test_tracked_task_cache() -> None:
+    @tracked_task_cache
+    async def cached_func(x: int) -> int:
+        return x * 2
+
+    # First call
+    await cached_func(5)
+    assert cached_func.cache_stats().hits == 0
+    assert cached_func.cache_stats().misses == 1
+
+    # Second call should use cache
+    await cached_func(5)
+    assert cached_func.cache_stats().hits == 1
+    assert cached_func.cache_stats().misses == 1
+
+    # Discard should reset stats
+    cached_func.cache_discard(5)
+    assert cached_func.cache_stats().hits == 0
+    assert cached_func.cache_stats().misses == 0
+
+
+@pytest.mark.asyncio
 async def test_lru_task_cache() -> None:
     call_count = 0
 
@@ -95,6 +129,23 @@ async def test_lru_task_cache() -> None:
     # This should cause a new call since 1 was evicted
     await cached_func(1)
     assert call_count == 4
+
+
+@pytest.mark.asyncio
+async def test_tracked_lru_task_cache() -> None:
+    @tracked_lru_task_cache
+    async def cached_func(x: int) -> int:
+        return x * 2
+
+    # Fill cache
+    await cached_func(1)
+    await cached_func(2)
+    assert cached_func.cache_stats().hits == 0
+    assert cached_func.cache_stats().misses == 2
+
+    await cached_func(1)
+    assert cached_func.cache_stats().hits == 1
+    assert cached_func.cache_stats().misses == 2
 
 
 @pytest.mark.asyncio
