@@ -19,14 +19,15 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Hashable
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, cast, overload
+from typing import TYPE_CHECKING, Any, Self, cast, overload
 
 from dynamo_utils.sentinel import Sentinel
+from dynamo_utils.typedefs import CoroFunc
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Mapping
 
-    from dynamo_utils.typedefs import Coro, TaskCoroFunc
+    from dynamo_utils.typedefs import Coro
 
 
 __all__ = (
@@ -55,6 +56,7 @@ class HashedSequence(list[Hashable]):
     def __eq__(self, other: object) -> bool:
         return self[:] == other[:] if isinstance(other, type(self)) else False
 
+    # Tuple of types instead of a set is slightly faster here.
     @classmethod
     def from_call(
         cls: type[HashedSequence],
@@ -68,7 +70,12 @@ class HashedSequence(list[Hashable]):
         return first if len(key) == 1 and type(first) in fast_types else cls(key)
 
 
-MISSING = Sentinel("MISSING")
+class _MISSING(Sentinel):
+    def __new__(cls) -> Self:
+        return super().__new__(cls, "MISSING")
+
+
+MISSING = _MISSING()
 
 
 class LRU[K, V]:
@@ -82,7 +89,7 @@ class LRU[K, V]:
     def get(self, key: K, /) -> V: ...
     @overload
     def get[T](self, key: K, default: T, /) -> V | T: ...
-    def get(self, key: K, default: Any = MISSING, /) -> Any:
+    def get(self, key: K, default: _MISSING = MISSING, /) -> Any:
         if key not in self.cache:
             if default is MISSING:
                 raise KeyError(key)
@@ -128,6 +135,10 @@ def _lru_evict(
 _WRAP_ASSIGN = ("__module__", "__name__", "__qualname__", "__doc__")
 
 
+type _TaskFunc[**P, R] = CoroFunc[P, R] | Callable[P, asyncio.Task[R]]
+type TaskCoroFunc[**P, R] = CoroFunc[P, R] | _TaskFunc[P, R]
+
+
 class TaskFunc[**P, R]:
     """A function that returns a cached task.
 
@@ -135,8 +146,7 @@ class TaskFunc[**P, R]:
     preemptively cached tasks.
 
     Methods:
-        cache_discard: Remove a cache entry based on the arguments passed to the
-                       decorated coroutine.
+        cache_discard: Remove a cache entry based on the args of the decorated coroutine.
     """
 
     __slots__ = ("_task",)
@@ -160,21 +170,23 @@ class TrackedTaskFunc[**P, R](TaskFunc[P, R]):
     preemptively cached tasks.
 
     Methods:
-        cache_discard: Remove a cache entry based on the arguments passed to the
-                       decorated coroutine.
+        cache_discard: Remove a cache entry based on the args of the decorated coroutine.
         cache_stats: Return the cache hit and miss statistics.
     """
 
     def cache_stats(self) -> CacheStats: ...
 
     def __repr__(self) -> str:
-        return f"<cached task {getattr(self._task, '__qualname__', '?')} {self.cache_stats()!r}>"
+        stats = self.cache_stats()
+        return f"<cached task {getattr(self._task, '__qualname__', '?')} {stats!r}>"
 
 
 @overload
 def task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TaskFunc[P, R]: ...
 @overload
-def task_cache[**P, R](ttl: float | None = None) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]]: ...
+def task_cache[**P, R](
+    ttl: float | None = None,
+) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]]: ...
 def task_cache[**P, R](
     ttl: float | TaskCoroFunc[P, R] | None = None,
 ) -> Callable[[TaskCoroFunc[P, R]], TaskFunc[P, R]] | TaskFunc[P, R]:
@@ -190,8 +202,8 @@ def task_cache[**P, R](
         ttl (float | None): The time-to-live for the cache entry. Defaults to None (forever).
 
     Returns:
-        A decorator that wraps coroutine-like objects in functions that return preemptively
-        cached tasks.
+        A decorator that wraps coroutine-like objects in functions that return
+        preemptively cached tasks.
     """
     if isinstance(ttl, float):
         ttl = None if ttl <= 0 else ttl
@@ -253,8 +265,8 @@ def lru_task_cache[**P, R](
         maxsize (int): The maximum number of cache entries to keep. Supersedes ttl eviction.
 
     Returns:
-        A decorator that wraps coroutine-like objects in functions that return preemptively
-        cached tasks.
+        A decorator that wraps coroutine-like objects in functions that return
+        preemptively cached tasks.
     """
     if isinstance(ttl, float):
         ttl = None if ttl <= 0 else ttl
@@ -287,7 +299,9 @@ def lru_task_cache[**P, R](
 @overload
 def tracked_task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TrackedTaskFunc[P, R]: ...
 @overload
-def tracked_task_cache[**P, R](ttl: float | None = None) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]]: ...
+def tracked_task_cache[**P, R](
+    ttl: float | None = None,
+) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]]: ...
 def tracked_task_cache[**P, R](
     ttl: float | TaskCoroFunc[P, R] | None = None,
 ) -> Callable[[TaskCoroFunc[P, R]], TrackedTaskFunc[P, R]] | TrackedTaskFunc[P, R]:
@@ -304,8 +318,8 @@ def tracked_task_cache[**P, R](
         ttl (float | None): The time-to-live for the cache entry. Defaults to None (forever).
 
     Returns:
-        A decorator that wraps coroutine-like objects in functions that return preemptively
-        cached tasks.
+        A decorator that wraps coroutine-like objects in functions that return
+        preemptively cached tasks.
     """
     if isinstance(ttl, float):
         ttl = None if ttl <= 0 else ttl
@@ -351,7 +365,10 @@ def tracked_task_cache[**P, R](
 
 
 @overload
-def tracked_lru_task_cache[**P, R](coro: TaskCoroFunc[P, R], /) -> TrackedTaskFunc[P, R]: ...
+def tracked_lru_task_cache[**P, R](
+    coro: TaskCoroFunc[P, R],
+    /,
+) -> TrackedTaskFunc[P, R]: ...
 @overload
 def tracked_lru_task_cache[**P, R](
     ttl: float | None = None,
@@ -377,8 +394,8 @@ def tracked_lru_task_cache[**P, R](
         maxsize (int): The maximum number of cache entries to keep. Supersedes ttl eviction.
 
     Returns:
-        A decorator that wraps coroutine-like objects in functions that return preemptively
-        cached tasks.
+        A decorator that wraps coroutine-like objects in functions that return
+        preemptively cached tasks.
     """
     if isinstance(ttl, float):
         ttl = None if ttl <= 0 else ttl

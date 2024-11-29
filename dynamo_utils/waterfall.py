@@ -9,7 +9,7 @@ Example:
     ...     await some_api_call(items)
     ...
     >>> # Create waterfall with 5 second max wait, 100 items max per batch
-    >>> waterfall = Waterfall(max_wait=5.0, max_quantity=100, async_callback=process_batch)
+    >>> waterfall = Waterfall(5.0, 100, process_batch)
     >>> waterfall.start()
     >>>
     >>> # Add items to be processed
@@ -70,7 +70,11 @@ class Waterfall[T]:
             msg = "Can't put something in a shut down Waterfall."
             raise RuntimeError(msg) from e
 
-    async def _process_batch(self, queue_items: MutableSequence[T], tasks: set[asyncio.Task[Any]]) -> None:
+    async def _process_batch(
+        self,
+        queue_items: MutableSequence[T],
+        tasks: set[asyncio.Task[Any]],
+    ) -> None:
         t = asyncio.create_task(self.callback(queue_items))
         tasks.add(t)
         t.add_done_callback(tasks.remove)

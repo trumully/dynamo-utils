@@ -50,7 +50,7 @@ def preserve[T](iterator: Iterator[T]) -> Iterator[Iterator[T]]:
 
 @contextlib.asynccontextmanager
 async def apreserve[T](iterator: AsyncIterator[T]) -> AsyncIterator[AsyncIterator[T]]:
-    """Preserve an async iterator's state by preventing __aiterclose__ from being called."""
+    """Preserve an async iterator's state by preventing __aiterclose__ calls."""
 
     class PreservedAsyncIterator:
         def __init__(self, it: AsyncIterator[T]) -> None:

@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
 
 class Sentinel:
-    """A unique sentinel value that maintains identity across copies and pickle operations."""
+    """A unique sentinel value that maintains identity across various operations."""
 
     __slots__ = ("_module_name", "_name", "_repr", "_truthiness")
 
@@ -37,7 +37,8 @@ class Sentinel:
         truthiness = False if truthiness is None else truthiness
         module_name = _get_module_name() if module_name is None else str(module_name)
 
-        registry_key = _sys.intern(f"{cls.__module__}-{cls.__qualname__}-{module_name}-{name}")
+        key = f"{cls.__module__}-{cls.__qualname__}-{module_name}-{name}"
+        registry_key = _sys.intern(key)
 
         if (existing := _registry.get(registry_key, None)) is not None:
             return cast(Self, existing)
