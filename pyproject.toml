@@ -16,7 +16,6 @@ authors = [
     { name = "Truman Mulholland", email = "truman.mulholland@gmail.com" }
 ]
 description = "Utilities for my Discord bot"
-license = { text = "Unlicense" }
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 classifiers = [
@@ -28,7 +27,11 @@ classifiers = [
     "Programming Language :: Python :: 3 :: Only",
     "Programming Language :: Python :: 3.13"
 ]
-urls = {  "Homepage" = "https://github.com/trumully/dynamo-utils", "Issue Tracker" = "https://github.com/trumully/dynamo-utils/issues", "Source Code" = "https://github.com/trumully/dynamo-utils" }
+
+[project.urls]
+Homepage = "https://github.com/trumully/dynamo-utils"
+Repository = "https://github.com/trumully/dynamo-utils.git"
+Issues = "https://github.com/trumully/dynamo-utils/issues"
 
 [dependency-groups]
 dev = [
@@ -37,13 +40,11 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-minversion = "7.0"
+minversion = "8.0.0"
 asyncio_mode = "strict"
 asyncio_default_fixture_loop_scope = "session"
 xfail_strict = true
-testpaths = [
-    "tests",
-]
+testpaths = ["tests"]
 
 addopts = [
     "--strict-markers",
@@ -64,10 +65,10 @@ preview = true
 [tool.ruff.lint]
 select = [
     "A", "ANN", "ASYNC", "B", "BLE", "C4", "COM", "DTZ", "E",
-    "EM", "ERA", "F", "FA", "FURB", "G", "I", "INP", "ISC", "NPY",
-    "PD", "PERF", "PGH", "PIE", "PLC", "PLE", "PLR", "PLW", "PTH", "PYI",
-    "Q", "Q003", "RET", "RSE", "RUF", "S", "SIM", "SLOT", "T20", "TC", "TID",
-    "TRY", "UP", "YTT"
+    "EM", "ERA", "F", "FA", "FURB", "G", "I", "INP", "ISC",
+    "NPY", "PD", "PERF", "PGH", "PIE", "PLC", "PLE", "PLR",
+    "PLW", "PTH", "PYI", "Q", "Q003", "RET", "RSE", "RUF",
+    "S", "SIM", "SLOT", "T20", "TC", "TID", "TRY", "UP", "YTT"
 ]
 
 ignore = [
@@ -76,11 +77,14 @@ ignore = [
     "D1",  # Well named items don't need docstrings
     "E501",  # Ruff handles this 
     "PLW3201",  # I want some dunders that have no "special meaning"
-    "RET504",  # A bit too opinionated 
+    
+    # A bit too opinionated 
+    "RET504",
     "RET505",
     "RET506",
     "RET507",
     "RET508",
+
     "RUF029",  # Some interfaces need an async method
     "S101",  # Allow assert
     "PLC0415",  # Top-of-file imports are not always best
@@ -102,9 +106,7 @@ line-ending = "lf"
 
 [tool.ruff.lint.pydocstyle]
 convention = "google"
-"ignore-decorators" = [
-    "typing.overload",
-]
+"ignore-decorators" = ["typing.overload"]
 
 
 [tool.ruff.lint.flake8-tidy-imports.banned-api]
