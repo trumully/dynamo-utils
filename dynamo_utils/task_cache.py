@@ -19,7 +19,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Hashable
 from functools import partial, wraps
-from typing import TYPE_CHECKING, Any, Self, cast, overload
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from dynamo_utils.sentinel import Sentinel
 from dynamo_utils.typedefs import CoroFunc
@@ -70,12 +70,7 @@ class HashedSequence(list[Hashable]):
         return first if len(key) == 1 and type(first) in fast_types else cls(key)
 
 
-class _MISSING(Sentinel):
-    def __new__(cls) -> Self:
-        return super().__new__(cls, "MISSING")
-
-
-MISSING = _MISSING()
+MISSING = Sentinel("MISSING")
 
 
 class LRU[K, V]:
@@ -89,7 +84,7 @@ class LRU[K, V]:
     def get(self, key: K, /) -> V: ...
     @overload
     def get[T](self, key: K, default: T, /) -> V | T: ...
-    def get(self, key: K, default: _MISSING = MISSING, /) -> Any:
+    def get(self, key: K, default: Any = MISSING, /) -> Any:
         if key not in self.cache:
             if default is MISSING:
                 raise KeyError(key)
