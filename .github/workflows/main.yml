@@ -55,6 +55,7 @@ jobs:
 
   test:
     runs-on: ubuntu-22.04
+    needs: [ruff, check]
     steps:
       - uses: actions/checkout@v4
 
