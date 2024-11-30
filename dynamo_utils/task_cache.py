@@ -227,7 +227,7 @@ def task_cache[**P, R](
             key = HashedSequence.from_call(args, kwargs)
             internal_cache.pop(key, None)
 
-        _wrapped = cast(TaskFunc[P, R], wrapped)
+        _wrapped = cast("TaskFunc[P, R]", wrapped)
         _wrapped.cache_discard = cache_discard
         return _wrapped
 
@@ -284,7 +284,7 @@ def lru_task_cache[**P, R](
             key = HashedSequence.from_call(args, kwargs)
             internal_cache.remove(key)
 
-        _wrapped = cast(TaskFunc[P, R], wrapped)
+        _wrapped = cast("TaskFunc[P, R]", wrapped)
         _wrapped.cache_discard = cache_discard
         return _wrapped
 
@@ -351,7 +351,7 @@ def tracked_task_cache[**P, R](
         def cache_stats() -> CacheStats:
             return stats
 
-        _wrapped = cast(TrackedTaskFunc[P, R], wrapped)
+        _wrapped = cast("TrackedTaskFunc[P, R]", wrapped)
         _wrapped.cache_discard = cache_discard
         _wrapped.cache_stats = cache_stats
         return _wrapped
@@ -422,7 +422,7 @@ def tracked_lru_task_cache[**P, R](
         def cache_stats() -> CacheStats:
             return stats
 
-        _wrapped = cast(TrackedTaskFunc[P, R], wrapped)
+        _wrapped = cast("TrackedTaskFunc[P, R]", wrapped)
         _wrapped.cache_discard = cache_discard
         _wrapped.cache_stats = cache_stats
         return _wrapped
