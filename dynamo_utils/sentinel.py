@@ -41,7 +41,7 @@ class Sentinel:
         registry_key = _sys.intern(key)
 
         if (existing := _registry.get(registry_key, None)) is not None:
-            return cast(Self, existing)
+            return cast("Self", existing)
         instance_type = type(
             name,
             (cls,),
@@ -57,7 +57,7 @@ class Sentinel:
         instance.__class__ = instance_type
 
         with _lock:
-            return cast(Self, _registry.setdefault(registry_key, instance))
+            return cast("Self", _registry.setdefault(registry_key, instance))
 
     def __repr__(self) -> str:
         return self._repr

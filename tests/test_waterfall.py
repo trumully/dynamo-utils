@@ -13,7 +13,11 @@ async def test_waterfall_batch_processing() -> None:
         processed_items.append(items)
         await asyncio.sleep(1e-3)  # Simulate work
 
-    waterfall: Waterfall[str] = Waterfall(max_wait=0.5, max_quantity=3, async_callback=process_batch)
+    waterfall: Waterfall[str] = Waterfall(
+        max_wait=0.5,
+        max_quantity=3,
+        async_callback=process_batch,
+    )
     waterfall.start()
 
     # Add items
@@ -38,7 +42,11 @@ async def test_waterfall_max_wait() -> None:
     async def process_batch(items: Sequence[str]) -> None:
         processed_items.append(items)
 
-    waterfall: Waterfall[str] = Waterfall(max_wait=0.2, max_quantity=5, async_callback=process_batch)
+    waterfall: Waterfall[str] = Waterfall(
+        max_wait=0.2,
+        max_quantity=5,
+        async_callback=process_batch,
+    )
     waterfall.start()
 
     waterfall.put("item1")
@@ -57,7 +65,11 @@ async def test_waterfall_put_in_shut_down() -> None:
     async def process_batch(items: Sequence[str]) -> None:
         processed_items.append(items)
 
-    waterfall: Waterfall[str] = Waterfall(max_wait=0.2, max_quantity=5, async_callback=process_batch)
+    waterfall: Waterfall[str] = Waterfall(
+        max_wait=0.2,
+        max_quantity=5,
+        async_callback=process_batch,
+    )
     waterfall.start()
 
     waterfall.put("item1")

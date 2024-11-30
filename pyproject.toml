@@ -42,7 +42,7 @@ dev = [
 [tool.pytest.ini_options]
 minversion = "8.0.0"
 asyncio_mode = "strict"
-asyncio_default_fixture_loop_scope = "session"
+asyncio_default_fixture_loop_scope = "function"
 xfail_strict = true
 testpaths = ["tests"]
 
@@ -84,6 +84,10 @@ ignore = [
     "RET506",
     "RET507",
     "RET508",
+    
+    # These screw with formatting
+    "COM812",
+    "ISC001",
 
     "RUF029",  # Some interfaces need an async method
     "S101",  # Allow assert

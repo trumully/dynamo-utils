@@ -1,7 +1,13 @@
 from collections.abc import Sequence
 
 import pytest
-from dynamo_utils.iterclose import aiterclose, apreserve, iterclose, preserve, process_async_iterable
+from dynamo_utils.iterclose import (
+    aiterclose,
+    apreserve,
+    iterclose,
+    preserve,
+    process_async_iterable,
+)
 
 
 def test_preserve() -> None:
