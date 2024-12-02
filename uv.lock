@@ -12,7 +12,7 @@ wheels = [
 
 [[package]]
 name = "dynamo-utils"
-version = "2024.11.28"
+version = "2024.11.30"
 source = { editable = "." }
 
 [package.dev-dependencies]

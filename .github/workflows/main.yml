@@ -23,9 +23,7 @@ jobs:
           args: 'check'
 
   check:
-    runs-on: ubuntu-22.04
-    
-    name: Check 3.13
+    runs-on: ubuntu-22.04    
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,6 +52,7 @@ jobs:
           ! $(find . ! -path "./.git/*" -not -type d -exec file "{}" ";" |& grep -q " CRLF ")
 
   test:
+    name: Run tests
     runs-on: ubuntu-22.04
     needs: [ruff, check]
     steps:
