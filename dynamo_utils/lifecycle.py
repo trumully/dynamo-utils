@@ -170,13 +170,16 @@ class AsyncLifecycle[Context]:
                 )
                 await asyncio.gather(main_task, signal_task)
 
+            def stop_when_done(_fut: asyncio.Future[None]) -> None:
+                loop.stop()
+
             future = asyncio.ensure_future(wrapped_main(), loop=loop)
-            future.add_done_callback(lambda _: loop.stop())
 
             try:
+                future.add_done_callback(stop_when_done)
                 loop.run_forever()
             finally:
-                future.remove_done_callback(lambda _: loop.stop())
+                future.remove_done_callback(stop_when_done)
 
             loop.run_until_complete(self.hooks.async_cleanup(self.context))
             self._finalize_tasks()
